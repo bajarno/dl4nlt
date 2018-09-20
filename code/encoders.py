@@ -6,14 +6,27 @@ class BOWEncoder(nn.Module):
     """
     Bag-of-Words encoder
     From "A Neural Attention Model for Abstractive Sentence Summarization" (Rush et al. 2015)
+
+    TODO: convert EmbeddingBag to nn.Embedding and add padding functionality
     """
     def __init__(self, vocab_size, embedding_size, output_size):
         super(BOWEncoder, self).__init__()
         self.embedding = nn.EmbeddingBag(vocab_size, embedding_size)
         self.fc_out = nn.Linear(embedding_size, output_size)
 
-    def forward(self, x, *args, **kwargs):
-        return self.fc_out(self.embedding(x))
+    def forward(self, x, y_c, *_):
+        """
+        creates a vector representation for each sequence in x.
+
+        If y_c is None, return single vector representation.
+        If y is tensor of [batch_size, y_length, nnlm_order],
+            tile vector representations to size [batch_size, y_length, output_size]
+        """
+        out = self.fc_out(self.embedding(x))
+        if y_c is not None:
+            out = out.unsqueeze(1)
+            out = out.expand(out.size(0), y_c.size(1), out.size(-1))
+        return out
 
 
 class ConvEncoder(nn.Module):
@@ -43,12 +56,22 @@ class ConvEncoder(nn.Module):
 
         self.fc_out = nn.Linear(hidden_size, output_size)
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x, y_c, *_):
+        """
+        creates a vector representation for each sequence in x.
+
+        If y_c is None, return single vector representation.
+        If y is tensor of [batch_size, y_length, nnlm_order],
+            tile vector representations to size [batch_size, y_length, output_size]
+        """
         h = self.embedding(x).transpose(2, 1)
         h = self.layers(h)
         # max over time
         h = F.adaptive_max_pool1d(h, 1).squeeze()
         out = self.fc_out(h)
+        if y_c is not None:
+            out = out.unsqueeze(1)
+            out = out.expand(out.size(0), y_c.size(1), out.size(-1))
         return out
 
 

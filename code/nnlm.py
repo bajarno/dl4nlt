@@ -13,7 +13,7 @@ class NNLM(nn.Module):
     """
     def __init__(self, seq_len, vocab_size, embedding_dim, hidden_size, output_size, activation=torch.tanh):
         super(NNLM, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.activation = activation
         self.order = seq_len
         self.vocab_size = vocab_size
@@ -37,14 +37,13 @@ class NNLM(nn.Module):
 
     
     def forward(self, x):
-        # embed [batch_size, seq_len] -> [batch_size, seq_len, embedding_dim]
         x = self.embedding(x)
-        # cat embeddings [batch_size, seq_len, embedding_dim] -> [batch_size, seq_len * embedding_dim]
-        x = torch.reshape(x, (x.size(0), -1))
-        # hidden layers [b, sl * emb] -> [b, hidden]
+        if x.dim() == 4:
+            x = torch.reshape(x, (x.size(0), x.size(1), -1))
+        else:
+            x = torch.reshape(x, (x.size(0), -1))
         for fc in self.fc_hidden:
             x = self.activation(fc(x))
-        # [b, hidden] -> [b, out]
         out = self.fc_out(x) 
         return out
 
@@ -72,13 +71,14 @@ class FBModel(nn.Module):
                 raise RuntimeError("If teacher forcing is enabled, output_length is given by y_c.")
             output_length = y_c.size(1)
 
-            # Foreach ngram, target: encoder x, encode y_c, generate output
-            outputs = torch.zeros(batch_size, output_length, self.nnlm.vocab_size).to(X.device)
-            for i in range(output_length):
-                enc_i = self.encoder(x, y_c[:, i])
-                nnlm_i = self.nnlm(y_c[:, i])
-                outputs[:, i, :] = enc_i + nnlm_i
-            return outputs
+            # Generate context vectors from y_c
+            nnlm_out = self.nnlm(y_c)
+
+            # Generate document vectors from x
+            enc_out = self.encoder(x, y_c)
+            out = enc_out + nnlm_out
+
+            return out
 
         else:
             # No teacher forcing, feed previous prediction
@@ -91,71 +91,39 @@ class FBModel(nn.Module):
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         return sum([np.prod(p.size()) for p in model_parameters])
             
-def add_start_end(Y, start_token, end_token, n_start_tokens=1):
+def add_start_end(Y, n_start_tokens=1):
     b = Y.size(0)
-    start = torch.full([b, n_start_tokens], start_token, dtype=torch.long).to(Y.device)
-    end = torch.full([b, 1], end_token, dtype=torch.long).to(Y.device)
-    return torch.cat([start, Y, end], dim=1)
+    start = torch.full([b, n_start_tokens], Y[0,0], dtype=torch.long).to(Y.device)
+    return torch.cat([start, Y], dim=1)
 
 if __name__=="__main__":
-    # torch.manual_seed(1)
-    # # constants
     PAD_TOKEN = 0
-    # START_TOKEN = 1
-    # EOS_TOKEN = 2
-    DEVICE = 'cpu'
-
-    # hyperparams
-
-
-    # # define model
-    # # encoder = BOWEncoder(vocab_size, embedding_dim, vocab_size)
-    # encoder = ConvEncoder(vocab_size, embedding_dim, 4, hidden_size, vocab_size)
-    # nnlm = NNLM(order, vocab_size, embedding_dim, [hidden_size]*3, vocab_size)
-    # model = FBModel(encoder, nnlm).to(DEVICE)
-    # print('model params', model.num_params)
-
-    # # data
-    # batch_size = 4
-    # seqlength_x = 100
-    # seqlength_y = 8
-    # X = torch.LongTensor(batch_size, seqlength_x).random_(3, vocab_size).to(DEVICE)
-    # Y = torch.LongTensor(batch_size, seqlength_y).random_(3, vocab_size).to(DEVICE)
-    # print('X', X.size())
-    # print('Y', Y.size())
-
-
-
-    # # forward pass
-    # out = model(X, y_c)
-    # print('output', out.size())
-
-    # # Calculate loss
-    # crit = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
-    # loss = crit(out.transpose(2, 1), y_t)
-    # print('loss', loss.item(), 'on', loss.device)
-    train_loader, test_loader = get_dataloaders('test/preprocessed_testdata.csv')
-
+    DEVICE = 'cuda'
+    batch_size = 64
+    train_loader, test_loader = get_dataloaders('../data/kaggle_parsed_preprocessed_5000_vocab.csv', batch_size=batch_size)
     vocab_size = len(train_loader.dataset.w2i) + 1
     embedding_dim = 128
     hidden_size = 128
-    order = 1
+    order = 3
+    num_epochs = 10
 
 
     # define model
-    # encoder = BOWEncoder(vocab_size, embedding_dim, vocab_size)
-    encoder = ConvEncoder(vocab_size, embedding_dim, 4, hidden_size, vocab_size)
+    encoder = BOWEncoder(vocab_size, embedding_dim, vocab_size)
+    # encoder = ConvEncoder(vocab_size, embedding_dim, 4, hidden_size, vocab_size)
     nnlm = NNLM(order, vocab_size, embedding_dim, [hidden_size]*3, vocab_size)
     model = FBModel(encoder, nnlm).to(DEVICE)
     print('model params', model.num_params)
     opt = torch.optim.Adam(model.parameters())
-
     crit = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
 
-    for i in range(100):
-        for batch_idx, (X, Y) in enumerate(train_loader):
+    for _ in range(num_epochs):
+        for batch_idx, (Y, X) in enumerate(train_loader):
             # print(batch_idx, X.shape, Y.shape)
             
+            Y = Y.to(DEVICE)
+            Y = add_start_end(Y, order-1)
+            X = X.to(DEVICE)
             # Make ngrams and targets
             y_c = torch.stack([Y[:, i:i+order] for i in range(0, Y.size(1)-order)], 1)
             y_t = Y[:, order:]
@@ -170,7 +138,10 @@ if __name__=="__main__":
 
             # Calculate loss
             loss = crit(out.transpose(2, 1), y_t)
-            print('loss', loss.item(), 'on', loss.device)
 
             loss.backward()
             opt.step()
+
+            if not batch_idx%20:
+                print(batch_idx, 'loss', loss.item())
+        

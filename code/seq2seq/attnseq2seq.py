@@ -57,12 +57,10 @@ class S2SEncoder(nn.Module):
         Encoder is bidirectional, decoder is not. To pass the last encoder hidden state to the
         decoder, only the hidden + cell state of the forward direction is passed to the decoder.
         """
-        h_e, c_e = hidden
-        enc_layers = h_e.size(0) // 2
-        enc_batch = h_e.size(1)
-        enc_hidden = h_e.size(2)
-        h_forward = h_e.view(enc_layers, 2, enc_batch, enc_hidden)[:,0].squeeze(1).contiguous()
-        c_forward = c_e.view(enc_layers, 2, enc_batch, enc_hidden)[:,0].squeeze(1).contiguous()
+        h_bi, c_bi = hidden
+        # Forward states are on even indices
+        h_forward = h_bi[::2].contiguous()
+        c_forward = c_bi[::2].contiguous()
         return (h_forward, c_forward)
 
 
@@ -82,6 +80,7 @@ class S2SAttnDecoder(nn.Module):
         self.attn = MaskedAttention(hidden_size)
         self.fc_context = nn.Linear(hidden_size*2, hidden_size)
         self.fc_out = nn.Linear(hidden_size, vocab_size)
+        self.vocab_size = vocab_size
 
     
     def forward(self, decoder_inputs, decoder_lengths, 
