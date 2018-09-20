@@ -43,7 +43,6 @@ class ConvEncoder(nn.Module):
         super(ConvEncoder, self).__init__()
         self.layers = nn.Sequential()
         in_size = embedding_dim
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
         for i in range(n_layers):
             self.layers.add_module('conv{}'.format(i),
                                    nn.Conv1d(in_size, hidden_size, 
@@ -63,9 +62,8 @@ class ConvEncoder(nn.Module):
         If y_c is None, return single vector representation.
         If y is tensor of [batch_size, y_length, nnlm_order],
             tile vector representations to size [batch_size, y_length, output_size]
-        """
-        h = self.embedding(x).transpose(2, 1)
-        h = self.layers(h)
+        """ 
+        h = self.layers(x.transpose(2, 1))
         # max over time
         h = F.adaptive_max_pool1d(h, 1).squeeze()
         out = self.fc_out(h)

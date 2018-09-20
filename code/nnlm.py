@@ -13,7 +13,6 @@ class NNLM(nn.Module):
     """
     def __init__(self, seq_len, vocab_size, embedding_dim, hidden_size, output_size, activation=torch.tanh):
         super(NNLM, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.activation = activation
         self.order = seq_len
         self.vocab_size = vocab_size
@@ -37,7 +36,6 @@ class NNLM(nn.Module):
 
     
     def forward(self, x):
-        x = self.embedding(x)
         if x.dim() == 4:
             x = torch.reshape(x, (x.size(0), x.size(1), -1))
         else:
@@ -49,8 +47,9 @@ class NNLM(nn.Module):
 
 
 class FBModel(nn.Module):
-    def __init__(self, encoder, nnlm):
+    def __init__(self, embedding, encoder, nnlm):
         super(FBModel, self).__init__()
+        self.embedding = embedding
         self.encoder = encoder
         self.nnlm = nnlm
 
@@ -71,11 +70,14 @@ class FBModel(nn.Module):
                 raise RuntimeError("If teacher forcing is enabled, output_length is given by y_c.")
             output_length = y_c.size(1)
 
+            x_emb = self.embedding(x)
+            y_c_emb = self.embedding(y_c)
+
             # Generate context vectors from y_c
-            nnlm_out = self.nnlm(y_c)
+            nnlm_out = self.nnlm(y_c_emb)
 
             # Generate document vectors from x
-            enc_out = self.encoder(x, y_c)
+            enc_out = self.encoder(x_emb, y_c_emb)
             out = enc_out + nnlm_out
 
             return out
@@ -96,33 +98,66 @@ def add_start_end(Y, n_start_tokens=1):
     start = torch.full([b, n_start_tokens], Y[0,0], dtype=torch.long).to(Y.device)
     return torch.cat([start, Y], dim=1)
 
+def accuracy(preds, targets):
+    return torch.eq(preds, targets).float().mean()
+
+def dummy_batch(batch_size, vocab_size, sequence_length, batches_per_epoch=1000):
+    """
+    dummy data to test s2s tasks.
+
+    task: sort list of numbers, remove odd numbers, end with 1 as EOS.
+    """
+    for _ in range(batches_per_epoch):
+        lengths = np.random.randint(sequence_length//2, sequence_length, batch_size)
+        lengths[0] = sequence_length
+        X = [np.random.randint(1, vocab_size, l) for l in lengths]
+        Y = [np.array([1] + [i for i in np.sort(x) if i % 2 == 0] + [1]) for x in X]
+        Y_lengths = np.array([len(y) for y in Y])
+        Y_max = np.max([len(y) for y in Y])
+        X = [np.pad(x, (0, sequence_length-l), mode='constant') for x, l in zip(X, lengths)]
+        X = np.vstack(X)
+        Y = np.vstack([np.pad(y, (0, Y_max-len(y)), mode='constant') for y in Y])
+        
+        idx = Y_lengths.argsort(axis=0)[::-1]
+        X = X[idx]
+        Y = Y[idx]
+        lengths = lengths[idx]
+        Y_lengths = Y_lengths[idx]
+        yield (torch.LongTensor(Y), 
+               torch.LongTensor(X))
+
+dummy_batch(3, 20, 10)
+
 if __name__=="__main__":
     PAD_TOKEN = 0
     DEVICE = 'cuda'
     batch_size = 64
-    train_loader, test_loader = get_dataloaders('../data/kaggle_parsed_preprocessed_5000_vocab.csv', batch_size=batch_size)
-    vocab_size = len(train_loader.dataset.w2i) + 1
+    order = 3
+    train_loader, test_loader = get_dataloaders('../data/kaggle_parsed_preprocessed_10000_vocab.csv', markov_order=order, batch_size=batch_size)
+    vocab_size = train_loader.dataset.vocab_size
     embedding_dim = 128
     hidden_size = 128
-    order = 3
-    num_epochs = 10
+    num_epochs = 50
 
+    test_X, test_Y, test_xl, test_yl = next(iter(test_loader))
 
     # define model
-    encoder = BOWEncoder(vocab_size, embedding_dim, vocab_size)
-    # encoder = ConvEncoder(vocab_size, embedding_dim, 4, hidden_size, vocab_size)
+    # encoder = BOWEncoder(vocab_size, embedding_dim, vocab_size)
+    embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=PAD_TOKEN)
+    encoder = ConvEncoder(vocab_size, embedding_dim, 4, hidden_size, vocab_size)
     nnlm = NNLM(order, vocab_size, embedding_dim, [hidden_size]*3, vocab_size)
-    model = FBModel(encoder, nnlm).to(DEVICE)
+    model = FBModel(embedding, encoder, nnlm).to(DEVICE)
     print('model params', model.num_params)
-    opt = torch.optim.Adam(model.parameters())
-    crit = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN)
+    opt = torch.optim.Adam(model.parameters(), lr=5e-3)
+    loss_weights = torch.ones(vocab_size).to(DEVICE)
+    loss_weights[0] = 0.05
+    loss_weights[train_loader.dataset.w2i['UNK']] = 0.3
+    crit = nn.CrossEntropyLoss(weight=loss_weights)
 
-    for _ in range(num_epochs):
-        for batch_idx, (Y, X) in enumerate(train_loader):
-            # print(batch_idx, X.shape, Y.shape)
+    for epoch in range(num_epochs):
+        for batch_idx, (X, Y, xlen, ylen) in enumerate(train_loader):
             
             Y = Y.to(DEVICE)
-            Y = add_start_end(Y, order-1)
             X = X.to(DEVICE)
             # Make ngrams and targets
             y_c = torch.stack([Y[:, i:i+order] for i in range(0, Y.size(1)-order)], 1)
@@ -130,7 +165,7 @@ if __name__=="__main__":
             # print('y_c', y_c.size())
             # print('y_t', y_t.size())
 
-
+            model.train()
             opt.zero_grad()
             # forward pass
             out = model(X, y_c)
@@ -143,5 +178,23 @@ if __name__=="__main__":
             opt.step()
 
             if not batch_idx%20:
-                print(batch_idx, 'loss', loss.item())
+                acc = accuracy(torch.argmax(out, -1), y_t)
+                print('{} loss {:.4f} acc {:.4f}'.format(epoch, loss.item(), acc.item()), end='\r')
         
+        # Test single sentence every epoch
+        model.eval()
+        
+        # Make ngrams and targets
+        Y = test_Y.to(DEVICE)
+        X = test_X.to(DEVICE)
+        # Make ngrams and targets
+        y_c = torch.stack([Y[:, i:i+order] for i in range(0, Y.size(1)-order)], 1)
+        y_t = Y[:, order:]
+        out = model(X, y_c)
+        test_sentence = torch.argmax(out[-1], -1).cpu().numpy()
+        test_sentence = [test_loader.dataset.i2w[i] for i in test_sentence if i > 0]
+        correct = y_t.cpu()[-1].numpy()
+        correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
+        print(test_sentence)
+        print(correct)
+        print()

@@ -49,7 +49,7 @@ class TextCSVDataset(torch.utils.data.Dataset):
         words, _ = zip(*counts.most_common())
         for index, word in enumerate(words):
             self.w2i[word] = index + 1
-            self.i2w[index] = word
+            self.i2w[index + 1] = word
 
 
     def convert_to_indices(self, data):
@@ -100,7 +100,7 @@ class TextCSVDataset(torch.utils.data.Dataset):
     def make_square(self, inputs):
         n_data = len(inputs)
         max_length = max([len(item) for item in inputs])
-        square = torch.zeros(n_data, max_length)
+        square = torch.zeros(n_data, max_length, dtype=torch.long)
 
         for i, item in enumerate(inputs):
             square[i, :len(item)] = item
@@ -115,13 +115,12 @@ class TextCSVDataset(torch.utils.data.Dataset):
         # dynamic padding
         articles = self.make_square(articles)
         titles = self.make_square(titles)
-
-        return articles, titles, torch.tensor(article_lengths), torch.tensor(title_lengths)
+        return articles, titles, torch.LongTensor(article_lengths), torch.LongTensor(title_lengths)
 
     def __len__(self):
         return len(self.titles)
 
-def get_dataloaders(fn, markov_order=2, batch_size=16, validation_split=.2, shuffle_dataset=True, random_seed=42):
+def get_dataloaders(fn, markov_order=2, batch_size=16, validation_split=.2, shuffle_dataset=True, random_seed=1):
     # Creating data indices for training and validation splits:
     dataset = TextCSVDataset(fn, markov_order)
     dataset_size = len(dataset)
