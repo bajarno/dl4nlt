@@ -11,10 +11,9 @@ class BOWEncoder(nn.Module):
     """
     def __init__(self, vocab_size, embedding_size, output_size):
         super(BOWEncoder, self).__init__()
-        self.embedding = nn.EmbeddingBag(vocab_size, embedding_size)
         self.fc_out = nn.Linear(embedding_size, output_size)
 
-    def forward(self, x, y_c, *_):
+    def forward(self, x, y_c, x_lengths, *_):
         """
         creates a vector representation for each sequence in x.
 
@@ -22,7 +21,8 @@ class BOWEncoder(nn.Module):
         If y is tensor of [batch_size, y_length, nnlm_order],
             tile vector representations to size [batch_size, y_length, output_size]
         """
-        out = self.fc_out(self.embedding(x))
+        x_mean = torch.sum(1) / x_lengths.float()
+        out = self.fc_out(x_mean)
         if y_c is not None:
             out = out.unsqueeze(1)
             out = out.expand(out.size(0), y_c.size(1), out.size(-1))
