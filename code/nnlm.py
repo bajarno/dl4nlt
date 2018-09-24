@@ -34,7 +34,6 @@ class NNLM(nn.Module):
         # output layer
         self.fc_out = nn.Linear(hidden_size[-1], output_size)
 
-    
     def forward(self, x):
         if x.dim() == 4:
             x = torch.reshape(x, (x.size(0), x.size(1), -1))
@@ -53,7 +52,7 @@ class FBModel(nn.Module):
         self.encoder = encoder
         self.nnlm = nnlm
 
-    def forward(self, x, y_c, output_length=None, teacher_forcing=True):
+    def forward(self, x, y_c, xlen, ylen, output_length=None, teacher_forcing=True):
         """
         x: LongTensor [batch_size, x_seqlength]
         y_c: LongTensor:
@@ -64,7 +63,6 @@ class FBModel(nn.Module):
                          else, generate ngrams based on previous predictions.
         """
 
-        batch_size = y_c.size(0)
         if teacher_forcing:
             if output_length is not None:
                 raise RuntimeError("If teacher forcing is enabled, output_length is given by y_c.")
@@ -86,115 +84,24 @@ class FBModel(nn.Module):
             # No teacher forcing, feed previous prediction
             if output_length is None:
                 raise RuntimeError("If teacher forcing is enabled, output_length must be given.")
-            raise NotImplementedError("no teacherforcing not implemented.")
+
+            outputs = []
+            x_emb = self.embedding(x)
+            for t in range(output_length):
+                y_c_emb = self.embedding(y_c)
+                nnlm_out = self.nnlm(y_c_emb)
+                enc_out = self.encoder(x_emb, y_c_emb)
+                out = nnlm_out + enc_out
+                outputs.append(out)
+
+                # Make new ngram y_c with previous prediction
+                pred = out.detach().argmax(-1)
+                y_c = torch.cat([y_c[:, :, :-1], pred.unsqueeze(1)], dim=-1)
+
+            out = torch.cat(outputs, dim=1)
+            return out
 
     @property
     def num_params(self):
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         return sum([np.prod(p.size()) for p in model_parameters])
-            
-def add_start_end(Y, n_start_tokens=1):
-    b = Y.size(0)
-    start = torch.full([b, n_start_tokens], Y[0,0], dtype=torch.long).to(Y.device)
-    return torch.cat([start, Y], dim=1)
-
-def accuracy(preds, targets):
-    return torch.eq(preds, targets).float().mean()
-
-def dummy_batch(batch_size, vocab_size, sequence_length, batches_per_epoch=1000):
-    """
-    dummy data to test s2s tasks.
-
-    task: sort list of numbers, remove odd numbers, end with 1 as EOS.
-    """
-    for _ in range(batches_per_epoch):
-        lengths = np.random.randint(sequence_length//2, sequence_length, batch_size)
-        lengths[0] = sequence_length
-        X = [np.random.randint(1, vocab_size, l) for l in lengths]
-        Y = [np.array([1] + [i for i in np.sort(x) if i % 2 == 0] + [1]) for x in X]
-        Y_lengths = np.array([len(y) for y in Y])
-        Y_max = np.max([len(y) for y in Y])
-        X = [np.pad(x, (0, sequence_length-l), mode='constant') for x, l in zip(X, lengths)]
-        X = np.vstack(X)
-        Y = np.vstack([np.pad(y, (0, Y_max-len(y)), mode='constant') for y in Y])
-        
-        idx = Y_lengths.argsort(axis=0)[::-1]
-        X = X[idx]
-        Y = Y[idx]
-        lengths = lengths[idx]
-        Y_lengths = Y_lengths[idx]
-        yield (torch.LongTensor(Y), 
-               torch.LongTensor(X))
-
-dummy_batch(3, 20, 10)
-
-if __name__=="__main__":
-    PAD_TOKEN = 0
-    DEVICE = 'cuda'
-    batch_size = 64
-    order = 3
-    train_loader, test_loader = get_dataloaders('../data/kaggle_parsed_preprocessed_10000_vocab.csv', markov_order=order, batch_size=batch_size)
-    vocab_size = train_loader.dataset.vocab_size
-    embedding_dim = 128
-    hidden_size = 128
-    num_epochs = 50
-
-    test_X, test_Y, test_xl, test_yl = next(iter(test_loader))
-
-    # define model
-    # encoder = BOWEncoder(vocab_size, embedding_dim, vocab_size)
-    embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=PAD_TOKEN)
-    encoder = ConvEncoder(vocab_size, embedding_dim, 4, hidden_size, vocab_size)
-    nnlm = NNLM(order, vocab_size, embedding_dim, [hidden_size]*3, vocab_size)
-    model = FBModel(embedding, encoder, nnlm).to(DEVICE)
-    print('model params', model.num_params)
-    opt = torch.optim.Adam(model.parameters(), lr=5e-3)
-    loss_weights = torch.ones(vocab_size).to(DEVICE)
-    loss_weights[0] = 0.05
-    loss_weights[train_loader.dataset.w2i['UNK']] = 0.3
-    crit = nn.CrossEntropyLoss(weight=loss_weights)
-
-    for epoch in range(num_epochs):
-        for batch_idx, (X, Y, xlen, ylen) in enumerate(train_loader):
-            
-            Y = Y.to(DEVICE)
-            X = X.to(DEVICE)
-            # Make ngrams and targets
-            y_c = torch.stack([Y[:, i:i+order] for i in range(0, Y.size(1)-order)], 1)
-            y_t = Y[:, order:]
-            # print('y_c', y_c.size())
-            # print('y_t', y_t.size())
-
-            model.train()
-            opt.zero_grad()
-            # forward pass
-            out = model(X, y_c)
-            # print('output', out.size())
-
-            # Calculate loss
-            loss = crit(out.transpose(2, 1), y_t)
-
-            loss.backward()
-            opt.step()
-
-            if not batch_idx%20:
-                acc = accuracy(torch.argmax(out, -1), y_t)
-                print('{} loss {:.4f} acc {:.4f}'.format(epoch, loss.item(), acc.item()), end='\r')
-        
-        # Test single sentence every epoch
-        model.eval()
-        
-        # Make ngrams and targets
-        Y = test_Y.to(DEVICE)
-        X = test_X.to(DEVICE)
-        # Make ngrams and targets
-        y_c = torch.stack([Y[:, i:i+order] for i in range(0, Y.size(1)-order)], 1)
-        y_t = Y[:, order:]
-        out = model(X, y_c)
-        test_sentence = torch.argmax(out[-1], -1).cpu().numpy()
-        test_sentence = [test_loader.dataset.i2w[i] for i in test_sentence if i > 0]
-        correct = y_t.cpu()[-1].numpy()
-        correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
-        print(test_sentence)
-        print(correct)
-        print()
