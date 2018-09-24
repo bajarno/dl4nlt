@@ -14,6 +14,5 @@ modellen
 - pretrain embeddings -> Freek
 
 eval
-- BLEU, ROUGE, etc (zelfde als paper) -> Nils
-    eval.py, load model, return scores on test set met zelfde seed.
+- eval script met BLEU, ROUGE, etc (zelfde metrics als paper) -> Nils
 - visualizations -> Jarno
