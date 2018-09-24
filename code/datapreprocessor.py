@@ -12,7 +12,7 @@ class DataPreprocessor:
             csvreader = csv.reader(f)
             for title, content in csvreader:
                 line = title + ' ' + content
-                words = line.split()
+                words = line.lower().split()
                 for word in words:
                     counter[word] += 1
 
