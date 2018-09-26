@@ -1,0 +1,18 @@
+Deadline code: 3 oktober
+
+data
+- surfsara -> Freek
+- test met grotere vocab -> Freek
+- subwords (sentencepiece/BPE) -> Jarno
+- Grotere dataset als kaggle niet genoeg is -> Jarno
+
+modellen
+- attention -> Renzo
+- rnn ipv nnlm -> Eelco
+- adaptive softmax -> Eelco
+- pretrain nnlm as ngram language model -> Renzo
+- pretrain embeddings -> Freek
+
+eval
+- eval script met BLEU, ROUGE, etc (zelfde metrics als paper) -> Nils
+- visualizations -> Jarno
