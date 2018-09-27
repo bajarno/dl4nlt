@@ -21,7 +21,7 @@ class BOWEncoder(nn.Module):
         If y is tensor of [batch_size, y_length, nnlm_order],
             tile vector representations to size [batch_size, y_length, output_size]
         """
-        x_mean = torch.sum(1) / x_lengths.float()
+        x_mean = x.sum(1) / x_lengths.unsqueeze(1).float()
         out = self.fc_out(x_mean)
         if y_c is not None:
             out = out.unsqueeze(1)
@@ -71,16 +71,3 @@ class ConvEncoder(nn.Module):
             out = out.unsqueeze(1)
             out = out.expand(out.size(0), y_c.size(1), out.size(-1))
         return out
-
-
-if __name__=="__main__":
-    batch_size = 4
-    seqlength = 50
-    vocab_size = 100
-    hidden_size = 16
-    x = torch.LongTensor(batch_size, seqlength).random_(vocab_size)
-    print('input', x.size())
-    bow = BOWEncoder(vocab_size, hidden_size, vocab_size)
-    print('BOWEncoder out', bow.forward(x).size())
-    conv = ConvEncoder(vocab_size, hidden_size, 3, hidden_size, vocab_size)
-    print('ConvEncoder out', conv.forward(x).size())
