@@ -1,3 +1,7 @@
+#!/bin/sh
+#PBS -lwalltime=24:00:00
+#PBS -lnodes=1:ppn=12
+#PBS -lmem=250GB
 module load eb
 module load Python/3.6.3-foss-2017b
 module load cuDNN/7.0.5-CUDA-9.0.176
