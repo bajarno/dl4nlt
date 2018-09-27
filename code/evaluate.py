@@ -46,17 +46,19 @@ def rouge_score(ground_truth, predicted, avg=True):
 	rouge = Rouge()
 	return rouge.get_scores(predicted, ground_truth, avg)
 
-# TESTING
-ground_truth = 'the quick brown fox jumped over the lazy dog'
-predicted = 'the fast brown fox jumped over the lazy dog or not'
+if __name__=="__main__":
+	# TESTING
+	ground_truth = 'the quick brown fox jumped over the lazy dog'
+	predicted = 'the fast brown fox jumped over the lazy dog or not'
+	predicted = 'the quick brown fox jumped over the lazy'
 
-print("Ground truth:  ", ground_truth)
-print("Predicted:     ", predicted)
-print("Bleu - equal   ", bleu_score(ground_truth, predicted, 0))
-print("Bleu - n=1     ", bleu_score(ground_truth, predicted, 1))
-print("Bleu - n=2     ", bleu_score(ground_truth, predicted, 2))
-print("Bleu - n=3     ", bleu_score(ground_truth, predicted, 3))
-print("Bleu - n=4     ", bleu_score(ground_truth, predicted, 4))
-print("Rouge          ", rouge_score(ground_truth, predicted))
+	print("Ground truth:  ", ground_truth)
+	print("Predicted:     ", predicted)
+	print("Bleu - equal   ", bleu_score(ground_truth, predicted, 0))
+	print("Bleu - n=1     ", bleu_score(ground_truth, predicted, 1))
+	print("Bleu - n=2     ", bleu_score(ground_truth, predicted, 2))
+	print("Bleu - n=3     ", bleu_score(ground_truth, predicted, 3))
+	print("Bleu - n=4     ", bleu_score(ground_truth, predicted, 4))
+	print("Rouge          ", rouge_score(ground_truth, predicted))
 
-#TODO: wrapper for Pytorch such that this can be used during training / testing
+	#TODO: wrapper for Pytorch such that this can be used during training / testing

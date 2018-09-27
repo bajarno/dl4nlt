@@ -75,7 +75,7 @@ class FBModel(nn.Module):
             nnlm_out = self.nnlm(y_c_emb)
 
             # Generate document vectors from x
-            enc_out = self.encoder(x_emb, y_c_emb)
+            enc_out = self.encoder(x_emb, y_c_emb, xlen, ylen)
             out = enc_out + nnlm_out
 
             return out
@@ -90,7 +90,9 @@ class FBModel(nn.Module):
             for t in range(output_length):
                 y_c_emb = self.embedding(y_c)
                 nnlm_out = self.nnlm(y_c_emb)
-                enc_out = self.encoder(x_emb, y_c_emb)
+                # Without teacher forcing, length of y is always one.
+                ylen = torch.ones_like(ylen).to(ylen.device)
+                enc_out = self.encoder(x_emb, y_c_emb, xlen, ylen)
                 out = nnlm_out + enc_out
                 outputs.append(out)
 
