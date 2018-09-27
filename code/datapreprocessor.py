@@ -38,8 +38,8 @@ class DataPreprocessor:
             csvreader = csv.reader(f_in)
             writer =  csv.writer(f_out)
             for title, content in csvreader:
-                new_title = self.replace_unk(title, vocab)
-                new_content = self.replace_unk(content, vocab)
+                new_title = self.replace_unk(title.lower(), vocab)
+                new_content = self.replace_unk(content.lower(), vocab)
                 writer.writerow([new_title, new_content])
                 
 
