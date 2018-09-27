@@ -18,7 +18,7 @@ def train(config):
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 	
 	# get torch loaders for training and test data
-	train_loader, test_loader = get_dataloaders('../data/kaggle_preprocessed_20000.csv', 
+	train_loader, test_loader = get_dataloaders(config.dataset, 
 												markov_order=config.order, batch_size=config.batch_size)
 	vocab_size = train_loader.dataset.vocab_size
 	
@@ -154,6 +154,8 @@ if __name__ == "__main__":
 	parser.add_argument('--num_epochs', type=int, default=50, help='Number of training epochs.')
 	parser.add_argument('--teacher_force_ratio', type=int, default=1, help='TODO: add description.')
 	parser.add_argument('--teacher_force_decay', type=float, default=0.95, help='TODO: add description.')
+
+	parser.add_argument('--dataset', type=str, default='../data/kaggle_parsed_preprocessed_5000_vocab.csv', help='The datafile used for training')
 	
 	# Misc params
 	#parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
