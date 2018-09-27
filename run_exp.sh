@@ -23,13 +23,12 @@ if [ ! -d "dl4nlt" ]; then
   echo 'Cloned git' >> $log
 fi
 
+cd dl4nlt/code
+
 git fetch origin
 git reset --hard origin/master
 echo 'Reset to origin/master' >> $log
 
-cd dl4nlt/code
 echo 'Start running python' >> $log
-
 python train.py 2>&1 | tee -a $log
-
 echo 'Done running python' >> $log
