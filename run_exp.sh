@@ -9,8 +9,8 @@ module load OpenMPI/2.1.1-GCC-6.4.0-2.28
 export LD_LIBRARY_PATH=/hpc/eb/Debian9/cuDNN/7.0.5-CUDA-9.0.176/lib64:/hpc/eb/Debian9/CUDA/9.0.176/lib64:$LD_LIBRARY_PATH
 
 cd ~
-touch $log
 log=$(date +"%Y-%m-%d_%H:%M:%S")
+touch $log
 
 echo 'Starting run' >> $log
 
