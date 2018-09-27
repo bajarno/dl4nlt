@@ -99,7 +99,7 @@ def train(config):
 				else:
 					pred = torch.argmax(out, -1)
 				acc = accuracy(pred, y_t)
-				print('{} loss {:.4f} acc {:.4f}'.format(epoch, loss.item(), acc.item()), end='\r')
+				print('{} loss {:.4f} acc {:.4f}'.format(epoch, loss.item(), acc.item()))
 			
 			if config.num_epochs > 0 and config.num_epochs % 10 == 0:
 				torch.save(model, 'test_model_epoch_'+str(config.num_epochs)+'.pt')
