@@ -9,26 +9,26 @@ module load OpenMPI/2.1.1-GCC-6.4.0-2.28
 export LD_LIBRARY_PATH=/hpc/eb/Debian9/cuDNN/7.0.5-CUDA-9.0.176/lib64:/hpc/eb/Debian9/CUDA/9.0.176/lib64:$LD_LIBRARY_PATH
 
 cd ~
-log=$(date +"%Y-%m-%d_%H:%M:%S")
+log=~/$(date +"%Y-%m-%d_%H:%M:%S")
 touch $log
 
-echo 'Starting run' >> $log
+echo 'Starting run' | tee -a $log
 
 pip install torch torchvision --user --no-cache -U
 
-echo 'Installed torch' >> $log
+echo 'Installed torch' | tee -a $log
 
 if [ ! -d "dl4nlt" ]; then
   git clone git@github.com:bajarno/dl4nlt.git
-  echo 'Cloned git' >> $log
+  echo 'Cloned git' | tee -a $log
 fi
 
 cd dl4nlt/code
 
 git fetch origin
 git reset --hard origin/master
-echo 'Reset to origin/master' >> $log
+echo 'Reset to origin/master' | tee -a $log
 
-echo 'Start running python' >> $log
+echo 'Start running python' | tee -a $log
 python train.py 2>&1 | tee -a $log
-echo 'Done running python' >> $log
+echo 'Done running python' | tee -a $log
