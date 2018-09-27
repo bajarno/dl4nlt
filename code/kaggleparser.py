@@ -2,6 +2,7 @@ import csv
 import re
 import sys
 from nltk import sent_tokenize, word_tokenize
+import sentencepiece as spm
 
 csv.field_size_limit(sys.maxsize)
 
@@ -10,6 +11,13 @@ class KaggleParser:
     max_content_length = 100 # Maximum amount of words in content
 
     tag_re = re.compile(r'<[^>]+>') # Regular expression for removing HTML tags
+
+    subword_processor = None
+
+    def __init__(self, subword_model = None):
+        if subword_model != None:
+            self.subword_processor = spm.SentencePieceProcessor()
+            self.subword_processor.Load(subword_model)
 
     def processTitle(self, title):
         title = self.tag_re.sub('', title) # Remove HTML tags
@@ -22,8 +30,13 @@ class KaggleParser:
         if title.startswith('The Atlantic Daily:'):
             return None
 
-        tokens = word_tokenize(title)
-        tokens = ['<s>'] + tokens + ['</s>']
+        tokens = ['<s>']
+        if self.subword_processor != None:
+            tokens += self.subword_processor.encode_as_pieces(title)
+        else:
+            tokens += word_tokenize(title)
+        tokens += ['</s>']
+
         return tokens
 
     def processContent(self, content):
@@ -32,7 +45,12 @@ class KaggleParser:
 
         tokens = []
         for s in sentences:
-            s_tokens = ['<s>'] + word_tokenize(s) + ['</s>']
+            s_tokens = ['<s>']
+            if self.subword_processor != None:
+                s_tokens += self.subword_processor.encode_as_pieces(s)
+            else:
+                s_tokens += word_tokenize(s)
+            s_tokens += ['</s>']
 
             # Add sentence if total amount of tokens is lower than max
             if len(tokens) + len(s_tokens) < self.max_content_length:
@@ -68,9 +86,9 @@ class KaggleParser:
 
 if __name__ == '__main__':
     source_paths = ['../data/kaggle/articles1.csv', '../data/kaggle/articles2.csv', '../data/kaggle/articles3.csv']
-    target_path = '../data/kaggle_parsed.csv'
+    target_path = '../data/kaggle_parsed_subword.csv'
 
-    parser = KaggleParser()
+    parser = KaggleParser('../data/subword5000.model')
     parser.process_sources(source_paths, target_path)
 
 
