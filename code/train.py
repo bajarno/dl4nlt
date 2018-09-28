@@ -60,7 +60,7 @@ def train(config):
 	for epoch in range(config.num_epochs):
 		# TRAIN
 		num_teacherforce = [0, 0]
-		num_batch = len(train_loader)
+		num_batches = len(train_loader)
 		for batch_idx, (X, Y, xlen, ylen) in enumerate(train_loader):
 			
 			X = X.to(device)
@@ -101,10 +101,10 @@ def train(config):
 				else:
 					pred = torch.argmax(out, -1)
 				acc = accuracy(pred, y_t)
-				print('Epoch {}, step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch, batch_idx, num_batch, loss.item(), acc.item()))
+				print('[Epoch {}/{}], step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch, config.num_epochs, batch_idx, num_batches, loss.item(), acc.item()))
 			
-			if epoch > 0 and epoch % 10 == 0:
-				torch.save(model, 'test_model_epoch_'+str(epoch)+'.pt')
+			if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1: #save model every final step of each 10 epochs or last epoch
+				torch.save(model, 'test_model_epoch_'+str(epoch+1)+'.pt')
 				
 		
 		# EVAL
