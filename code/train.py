@@ -53,12 +53,14 @@ def train(config):
 	else:
 		# EXPERIMENTAL: set UNK weight lower (maybe not needed with better vocab)
 		loss_weights = torch.ones(vocab_size).to(device)
-		loss_weights[train_loader.dataset.w2i['UNK']] = 0.3
+		if 'UNK' in train_loader.dataset.w2i:
+			loss_weights[train_loader.dataset.w2i['UNK']] = 0.3
 		criterion = nn.CrossEntropyLoss(weight=loss_weights, ignore_index=0)
 
 	for epoch in range(config.num_epochs):
 		# TRAIN
 		num_teacherforce = [0, 0]
+		num_batch = len(train_loader)
 		for batch_idx, (X, Y, xlen, ylen) in enumerate(train_loader):
 			
 			X = X.to(device)
@@ -99,10 +101,10 @@ def train(config):
 				else:
 					pred = torch.argmax(out, -1)
 				acc = accuracy(pred, y_t)
-				print('{} loss {:.4f} acc {:.4f}'.format(epoch, loss.item(), acc.item()))
+				print('Epoch {}, step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch, batch_idx, num_batch, loss.item(), acc.item()))
 			
-			if config.num_epochs > 0 and config.num_epochs % 10 == 0:
-				torch.save(model, 'test_model_epoch_'+str(config.num_epochs)+'.pt')
+			if epoch > 0 and epoch % 10 == 0:
+				torch.save(model, 'test_model_epoch_'+str(epoch)+'.pt')
 				
 		
 		# EVAL
@@ -155,7 +157,7 @@ if __name__ == "__main__":
 	parser.add_argument('--teacher_force_ratio', type=int, default=1, help='TODO: add description.')
 	parser.add_argument('--teacher_force_decay', type=float, default=0.95, help='TODO: add description.')
 
-	parser.add_argument('--dataset', type=str, default='../data/kaggle_parsed_preprocessed_5000_vocab.csv', help='The datafile used for training')
+	parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
 	
 	# Misc params
 	#parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
