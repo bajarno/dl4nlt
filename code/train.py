@@ -102,10 +102,10 @@ def train(config):
 				else:
 					pred = torch.argmax(out, -1)
 				acc = accuracy(pred, y_t)
-				print('[Epoch {}/{}], step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch, config.num_epochs, batch_idx, num_batches, loss.item(), acc.item()))
+				print('[Epoch {}/{}], step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch +1, config.num_epochs, batch_idx, num_batches, loss.item(), acc.item()))
 			
-			if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1: #save model every final step of each 10 epochs or last epoch
-				torch.save(model, 'test_model_epoch_'+str(epoch+1)+'.pt')
+			# if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1: #save model every final step of each 10 epochs or last epoch
+			torch.save(model, config.output_dir + '/test_model_epoch_'+str(epoch+1)+'.pt')
 				
 		
 		# EVAL
@@ -159,6 +159,7 @@ if __name__ == "__main__":
 	parser.add_argument('--teacher_force_decay', type=float, default=0.95, help='TODO: add description.')
 
 	parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
+	parser.add_argument('--output_dir', type=str, default='./', help='The directory used for saving the model')
 	
 	# Misc params
 	#parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
