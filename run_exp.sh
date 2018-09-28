@@ -30,5 +30,5 @@ git reset --hard origin/master
 echo 'Reset to origin/master' | tee -a $log
 
 echo 'Start running python' | tee -a $log
-python train.py 2>&1 | tee -a $log
+python -u train.py 2>&1 | tee -a $log
 echo 'Done running python' | tee -a $log
