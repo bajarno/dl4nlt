@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from encoders import BOWEncoder, ConvEncoder
+from encoders import BOWEncoder, ConvEncoder, AttnEncoder
 from dataloader import get_dataloaders
 from nnlm import NNLM, FBModel
 
@@ -41,7 +41,7 @@ def train(config):
 		# 4 layers -> minimal X length = 2^4
 		encoder = ConvEncoder(vocab_size, config.embedding_dim, 4, config.hidden_size, output_size)
 	elif config.encoder_type == 'Attn':
-		raise NotImplementedError
+		encoder = AttnEncoder(config.embedding_dim, config.order)
 
 	nnlm = NNLM(config.order, vocab_size, config.embedding_dim, [config.hidden_size]*3, output_size)
 	model = FBModel(embedding, encoder, nnlm).to(device)
