@@ -3,7 +3,6 @@ import argparse
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from encoders import BOWEncoder, ConvEncoder, AttnEncoder
 from dataloader import get_dataloaders
@@ -57,6 +56,7 @@ def train(config):
 			loss_weights[train_loader.dataset.w2i['UNK']] = 0.3
 		criterion = nn.CrossEntropyLoss(weight=loss_weights, ignore_index=0)
 
+	losses = []
 	for epoch in range(config.num_epochs):
 		# TRAIN
 		num_teacherforce = [0, 0]
@@ -93,6 +93,7 @@ def train(config):
 			loss = criterion(out.reshape(-1, output_size), y_t.reshape(-1))
 			if config.adasoft:
 				loss = loss.loss
+			losses.append(loss.item())
 			loss.backward()
 			optimizer.step()
 
@@ -104,8 +105,12 @@ def train(config):
 				acc = accuracy(pred, y_t)
 				print('[Epoch {}/{}], step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch +1, config.num_epochs, batch_idx, num_batches, loss.item(), acc.item()))
 			
-			# if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1: #save model every final step of each 10 epochs or last epoch
-			torch.save(model, config.output_dir + '/test_model_epoch_'+str(epoch+1)+'.pt')
+			if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1: #save model every final step of each 10 epochs or last epoch
+				torch.save(model, config.output_dir + '/test_model_epoch_'+str(epoch+1)+'.pt')
+
+			if has_converged(losses):
+				print('Model converged')
+				return
 				
 		
 		# EVAL
@@ -135,6 +140,18 @@ def train(config):
 
 		# Decay teacherforcing
 		teacher_force_ratio *= config.teacher_force_decay
+
+def has_converged(losses):
+    min_steps = 5
+    if len(losses) < min_steps:
+        return False
+
+    for i in range(0, min_steps -1):
+        diff = abs(losses[-(i+1)] - losses[-(i+2)]) 
+        if diff > 1e-4:
+            return False
+
+    return True
 		
 if __name__ == "__main__":
 	

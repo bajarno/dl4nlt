@@ -31,6 +31,7 @@ def train(config):
 
     criterion = nn.CrossEntropyLoss(ignore_index=0)
 
+    losses = []
     for epoch in range(config.num_epochs):
         # TRAIN
         num_teacherforce = [0, 0]
@@ -63,17 +64,22 @@ def train(config):
             # Loss, optimization step
             loss = criterion(out.reshape(-1, vocab_size), Y_t.reshape(-1))
             loss.backward()
+            losses.append(loss.item())
             optimizer.step()
 
             if not batch_idx%20:
                 pred = torch.argmax(out, -1)
                 acc = accuracy(pred, Y_t)
-                print('[Epoch {}/{}], step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch, config.num_epochs, batch_idx, num_batches, loss.item(), acc.item()))
+                print('[Epoch {}/{}], step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch + 1, config.num_epochs, batch_idx, num_batches, loss.item(), acc.item()))
             
             if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1: #save model every final step of each 10 epochs or last epoch
-                torch.save(model, 'test_model_epoch_'+str(epoch+1)+'.pt')
-                
-        
+                torch.save(model, config.output_dir + '/test_model_epoch_'+str(epoch+1)+'.pt')
+
+            if has_converged(losses):
+                print('Model converged')
+                return
+
+
         # EVAL
         # model.eval()
         # print(num_teacherforce)
@@ -101,6 +107,18 @@ def train(config):
 
         # Decay teacherforcing
         teacher_force_ratio *= config.teacher_force_decay
+
+def has_converged(losses):
+    min_steps = 5
+    if len(losses) < min_steps:
+        return False
+
+    for i in range(0, min_steps -1):
+        diff = abs(losses[-(i+1)] - losses[-(i+2)]) 
+        if diff > 1e-4:
+            return False
+
+    return True
         
 if __name__ == "__main__":
     
@@ -124,6 +142,7 @@ if __name__ == "__main__":
     parser.add_argument('--teacher_force_decay', type=float, default=0.95, help='TODO: add description.')
 
     parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
+    parser.add_argument('--output_dir', type=str, default='./', help='The directory used for saving the model')
     
     # Misc params
     #parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
