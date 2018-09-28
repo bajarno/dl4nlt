@@ -53,7 +53,7 @@ def train(config):
             if np.random.random() > teacher_force_ratio:
                 num_teacherforce[0] += 1
                 Y_in = Y_in[:,0:1]
-                ylen = torch.ones(Y_in.size(0)).to(device)
+                ylen = torch.ones_like(ylen).to(device)
                 out_length =Y_t.size(1)
                 out = model(X, Y_in, xlen, ylen, output_length=out_length, teacher_forcing=False)
             else:
@@ -113,12 +113,12 @@ if __name__ == "__main__":
     # Model params
     parser.add_argument('--embedding_dim', type=int, default=128, help='Size of embedding.')
     parser.add_argument('--hidden_size', type=int, default=128, help='Amount of hidden units.')
-    parser.add_argument('--num_layers', type=int, default=2, help="Number of layers in encoder and decoder")
+    parser.add_argument('--num_layers', type=int, default=1, help="Number of layers in encoder and decoder")
     parser.add_argument('--dropout', type=float, default=0.3, help='dropout value')
 
     # Training params
     parser.add_argument('--batch_size', type=int, default=64, help='Number of examples to process in a batch.')
-    parser.add_argument('--learning_rate', type=float, default=5e-3, help='Learning rate.')
+    parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate.')
     parser.add_argument('--num_epochs', type=int, default=50, help='Number of training epochs.')
     parser.add_argument('--teacher_force_ratio', type=int, default=1, help='TODO: add description.')
     parser.add_argument('--teacher_force_decay', type=float, default=0.95, help='TODO: add description.')
