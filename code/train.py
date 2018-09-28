@@ -41,7 +41,7 @@ def train(config):
 		# 4 layers -> minimal X length = 2^4
 		encoder = ConvEncoder(vocab_size, config.embedding_dim, 4, config.hidden_size, output_size)
 	elif config.encoder_type == 'Attn':
-		encoder = AttnEncoder(config.embedding_dim, config.order)
+		encoder = AttnEncoder(vocab_size, config.embedding_dim, config.order)
 
 	nnlm = NNLM(config.order, vocab_size, config.embedding_dim, [config.hidden_size]*3, output_size)
 	model = FBModel(embedding, encoder, nnlm).to(device)
@@ -66,7 +66,8 @@ def train(config):
 			X = X.to(device)
 			Y = Y.to(device)
 			xlen = xlen.to(device)
-			ylen = ylen.to(device)
+			# Because we have history of size config.order, actual y_length is total y_length - order
+			ylen = (ylen-config.order).to(device)
 
 			# Make ngrams and targets
 			y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)

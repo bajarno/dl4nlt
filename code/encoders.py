@@ -74,17 +74,18 @@ class ConvEncoder(nn.Module):
 
 
 class AttnEncoder(nn.Module):
-    def __init__(self, hidden_size, y_order):
+    def __init__(self, vocab_size, hidden_size, y_order):
         super(AttnEncoder, self).__init__()
+        self.y_order = y_order
         self.attn = MaskedAttention(hidden_size)
         self.fc_y = nn.Linear(hidden_size*y_order, hidden_size)
-        self.smooting = smoothing
+        self.fc_out = nn.Linear(hidden_size, vocab_size)
 
     def forward(self, x, y, xlen, ylen):
         y = torch.reshape(y, (y.size(0), y.size(1), -1))
         y = self.fc_y(y)
         scores = self.attn(x, y, xlen, ylen)
-        return torch.bmm(scores, x)
+        return self.fc_out(torch.bmm(scores, x))
 
 
 class MaskedAttention(nn.Module):
