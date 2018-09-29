@@ -179,7 +179,7 @@ def lengths_to_mask(lengths, max_length=None):
 
     rng = torch.arange(max_length).expand(batch_size, max_length).cpu()
     lengths = lengths.unsqueeze(1).expand(batch_size, max_length).cpu()
-    return rng < lengths
+    return rng.float() < lengths.float()
 
 def make_2d_mask(l1, l2):
     """
