@@ -215,7 +215,7 @@ def train(config):
 			# Save model every final step of each 10 epochs or last epoch
 			#if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1:
 			#	torch.save(model, config.output_dir + '/test_model_epoch_'+str(epoch+1)+'.pt')
-			if batch_idx % 40 == 0:
+			if batch_idx % 100 == 0:
 				state = create_state(config, model, optimizer, criterion, epoch, loss, accuracy)
 				is_best_model = check_is_best(config.model_dir, config.encoder_type, config.embedding_dim, config.hidden_size, loss.item())
 				save_model(state, is_best_model, config.model_dir, config.encoder_type, config.embedding_dim, config.hidden_size, loss.item())
