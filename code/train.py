@@ -92,7 +92,6 @@ def has_converged(losses):
     return True
 	
 def train(config):
-	
 	# Initialize the device which to run the model on
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 	
@@ -215,7 +214,7 @@ def train(config):
 			# Save model every final step of each 10 epochs or last epoch
 			#if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1:
 			#	torch.save(model, config.output_dir + '/test_model_epoch_'+str(epoch+1)+'.pt')
-			if batch_idx % 100 == 0:
+			if batch_idx % 500 == 0:
 				state = create_state(config, model, optimizer, criterion, epoch, loss, accuracy)
 				is_best_model = check_is_best(config.model_dir, config.encoder_type, config.embedding_dim, config.hidden_size, loss.item())
 				save_model(state, is_best_model, config.model_dir, config.encoder_type, config.embedding_dim, config.hidden_size, loss.item())
@@ -227,13 +226,12 @@ def train(config):
 		
 		# EVAL #TODO: Seperate script or move to test.py
 		model.eval()
-		print('num_teacherforce', num_teacherforce)
 		
 		# Load test batch
 		Y = test_Y.to(device)
 		X = test_X.to(device)
 		xlen = test_xl.to(device)
-		ylen = test_yl.to(device)
+		ylen = (test_yl-config.order).to(device)
 		
 		# Make ngrams and targets
 		y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
@@ -268,17 +266,17 @@ if __name__ == "__main__":
 	# Model params
 	parser.add_argument('--embedding_dim', type=int, default=128, help='Size of embedding.')
 	parser.add_argument('--hidden_size', type=int, default=128, help='Amount of hidden units.')
-	parser.add_argument('--encoder_type', type=str, default='Conv', help='Type of Encoder: BOW, Conv, or Attn.')
+	parser.add_argument('--encoder_type', type=str, default='Attn', help='Type of Encoder: BOW, Conv, or Attn.')
 	parser.add_argument('--adasoft', type=bool, default=False, help='Use adaptive softmax.')
 
 	# Training params
 	parser.add_argument('--continue_training', type=str, default='', help='Name of saved model that needs to train further.')
 	parser.add_argument('--model_dir', type=str, default='../model_checkpoints/', help='Path to saved model that needs to train further.')
 	parser.add_argument('--batch_size', type=int, default=64, help='Number of examples to process in a batch.')
-	parser.add_argument('--learning_rate', type=float, default=5e-3, help='Learning rate.')
+	parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate.')
 	parser.add_argument('--num_epochs', type=int, default=50, help='Number of training epochs.')
 	parser.add_argument('--start_epoch', type=int, default=0, help='Start at this epoch.')
-	parser.add_argument('--teacher_force_ratio', type=int, default=1, help='TODO: add description.')
+	parser.add_argument('--teacher_force_ratio', type=int, default=0.99, help='TODO: add description.')
 	parser.add_argument('--teacher_force_decay', type=float, default=0.95, help='TODO: add description.')
 
 	parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
