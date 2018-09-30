@@ -30,6 +30,8 @@ class KaggleParser:
         if title.startswith('The Atlantic Daily:'):
             return None
 
+        title = title.lower()
+
         tokens = ['<s>']
         if self.subword_processor != None:
             tokens += self.subword_processor.encode_as_pieces(title)
@@ -41,6 +43,7 @@ class KaggleParser:
 
     def processContent(self, content):
         content = self.tag_re.sub('', content) # Remove HTML tags
+        content = content.lower()
         sentences = sent_tokenize(content)
 
         tokens = []
@@ -86,9 +89,9 @@ class KaggleParser:
 
 if __name__ == '__main__':
     source_paths = ['../data/kaggle/articles1.csv', '../data/kaggle/articles2.csv', '../data/kaggle/articles3.csv']
-    target_path = '../data/kaggle_parsed_subword.csv'
+    target_path = '../data/kaggle_parsed_subword_20000.csv'
 
-    parser = KaggleParser('../data/subword5000.model')
+    parser = KaggleParser('../data/subword20000.model')
     parser.process_sources(source_paths, target_path)
 
 
