@@ -137,7 +137,7 @@ def get_dataloaders(fn, markov_order=2, batch_size=16, validation_split=.2, shuf
     train_sampler = SubsetRandomSampler(train_indices)
     valid_sampler = SubsetRandomSampler(val_indices)
 
-    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_sampler, collate_fn=dataset.make_batch)
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=train_sampler, collate_fn=dataset.make_batch, shuffle=True)
     validation_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, sampler=valid_sampler, collate_fn=dataset.make_batch)
 
     return train_loader, validation_loader
