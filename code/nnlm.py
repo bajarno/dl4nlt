@@ -98,7 +98,7 @@ class FBModel(nn.Module):
 
                 # Make new ngram y_c with previous prediction
                 pred = out.detach().argmax(-1)
-                y_c = torch.cat([y_c[:, :, :-1], pred.unsqueeze(1)], dim=-1)
+                y_c = torch.cat([y_c[:, :, 1:], pred.unsqueeze(1)], dim=-1)
 
             out = torch.cat(outputs, dim=1)
             return out
