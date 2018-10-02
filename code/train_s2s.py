@@ -244,9 +244,9 @@ if __name__ == "__main__":
     parser.add_argument('--num_epochs', type=int, default=100, help='Number of training epochs.')
     parser.add_argument('--start_epoch', type=int, default=0, help='Start at this epoch.')
     parser.add_argument('--teacher_force_ratio', type=int, default=1, help='TODO: add description.')
-    parser.add_argument('--teacher_force_decay', type=float, default=0.99, help='TODO: add description.')
+    parser.add_argument('--teacher_force_decay', type=float, default=0.998, help='TODO: add description.')
 
-    parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
+    parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_10000.csv', help='The datafile used for training')
     parser.add_argument('--output_dir', type=str, default='./', help='The directory used for saving the model')
     
     # Misc params
