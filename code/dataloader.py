@@ -62,7 +62,7 @@ class TextCSVDataset(torch.utils.data.Dataset):
     def cap_text_and_count_frequencies(self):
         counter = Counter()
 
-        with open(self.fn, 'r') as f_in:
+        with open(self.fn, 'r', encoding = "utf-8") as f_in:
             csvreader = csv.reader(f_in)
             for title, article in csvreader:
                 title = self.cap_string(title, self.max_padding_title)

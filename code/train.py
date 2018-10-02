@@ -4,6 +4,7 @@ import os.path
 import sys
 import glob
 import shutil
+import time
 
 import torch
 import torch.nn as nn
@@ -90,11 +91,29 @@ def has_converged(losses):
             return False
 
     return True
+
+def beam_search_decoder(data, k):
+	data = torch.softmax(data, dim = 1)
+	sequences = [[list(), 0]]
+	# walk over each step in sequence
+	for row in data:
+		all_candidates = list()
+		# expand each current candidate
+		for i in range(len(sequences)):
+			seq, score = sequences[i]
+			for j in range(len(row)):
+				candidate = [seq + [j], score + -np.log(row[j])]
+				all_candidates.append(candidate)
+		# order all candidates by score
+		ordered = sorted(all_candidates, key=lambda tup:tup[1])
+		# select k best
+		sequences = ordered[:k]
+	return sequences
 	
 def train(config):
 	# Initialize the device which to run the model on
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-	
+	print("device:", device)
 	# Get torch loaders for training and test data
 	train_loader, test_loader = get_dataloaders(config.dataset, 
 												markov_order=config.order, batch_size=config.batch_size)
@@ -155,6 +174,7 @@ def train(config):
 		# EXPERIMENTAL: set UNK weight lower (maybe not needed with better vocab)
 		loss_weights = torch.ones(vocab_size).to(device)
 		if 'UNK' in train_loader.dataset.w2i:
+			print("bestaat dit?:", train_loader.dataset.w2i['UNK'])
 			loss_weights[train_loader.dataset.w2i['UNK']] = 0.3
 		criterion = nn.CrossEntropyLoss(weight=loss_weights, ignore_index=0)
 	
@@ -167,14 +187,13 @@ def train(config):
 		# TRAIN
 		num_teacherforce = [0, 0]
 		num_batches = len(train_loader)
+		starttime = time.time()
 		for batch_idx, (X, Y, xlen, ylen) in enumerate(train_loader):
-			
 			X = X.to(device)
 			Y = Y.to(device)
 			xlen = xlen.to(device)
 			# Because we have history of size config.order, actual y_length is total y_length - order
 			ylen = (ylen-config.order).to(device)
-
 			# Make ngrams and targets
 			y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
 			y_t = Y[:, config.order:]
@@ -202,15 +221,14 @@ def train(config):
 			losses.append(loss.item())
 			loss.backward()
 			optimizer.step()
-
 			if not batch_idx%20:
 				if config.adasoft:
 					pred = criterion.predict(out)
 				else:
 					pred = torch.argmax(out, -1)
 				acc = accuracy(pred, y_t)
-				print('[Epoch {}/{}], step {:04d}/{:04d} loss {:.4f} acc {:.4f}'.format(epoch +1, config.num_epochs, batch_idx, num_batches, loss.item(), acc.item()))
-			
+				print('[Epoch {}/{}], step {:04d}/{:04d} loss {:.4f} acc {:.4f} time {:.4f}'.format(epoch +1, config.num_epochs, batch_idx, num_batches, loss.item(), acc.item(), time.time() - starttime ))
+				starttime = time.time()
 			# Save model every final step of each 10 epochs or last epoch
 			#if (epoch + 1 % 10 == 0 or epoch + 1 == config.num_epochs) and batch_idx == num_batches - 1:
 			#	torch.save(model, config.output_dir + '/test_model_epoch_'+str(epoch+1)+'.pt')
@@ -236,17 +254,28 @@ def train(config):
 		# Make ngrams and targets
 		y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
 		y_t = Y[:, config.order:]
+
 		out = model(X, y_c, xlen, ylen)
-		print('out', out.size())
 		if config.adasoft:
-			test_sentence = criterion.predict(out.reshape(-1, output_size)).reshape(out.size(0), out.size(1))
-			test_sentence = test_sentence.cpu().numpy()
+			test_sentences = criterion.predict(out.reshape(-1, output_size)).reshape(out.size(0), out.size(1))
+			test_sentences = test_sentences.cpu().numpy()
 		else:
-			test_sentence = torch.argmax(out[-1], -1).cpu().numpy()
-		test_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in test_sentence]
+			test_sentences = beam_search_decoder(out[-1].detach().cpu(), config.beam_search_k)
+			#test_sentence = torch.argmax(out[-1], -1).cpu().numpy()
+		print("top", config.beam_search_k, "predictions:")
+		for counter, sentence in enumerate(test_sentences):
+			prediction = []
+			for i in sentence[0]:
+				prediction.append(test_loader.dataset.i2w[i])
+				if prediction[-1] == '</s>':
+					break
+			print('{}: {}'.format(counter + 1, prediction))
+
+		#test_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in test_sentence]
+		#print('test_sentence', test_sentence)
+		
 		correct = y_t.cpu()[-1].numpy()
 		correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
-		print('test_sentence', test_sentence)
 		print('correct', correct)
 		print()
 
@@ -281,6 +310,8 @@ if __name__ == "__main__":
 
 	parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
 	parser.add_argument('--output_dir', type=str, default='./', help='The directory used for saving the model')
+
+	parser.add_argument('--beam_search_k', type=int, default=3, help='The number of sequences to store in the beam search algorithm')
 	
 	# Misc params
 	#parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
