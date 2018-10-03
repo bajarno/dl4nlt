@@ -1,23 +1,17 @@
 import csv
 import re
 import sys
-from nltk import sent_tokenize, word_tokenize
-import sentencepiece as spm
+from nltk import sent_tokenize
 
 csv.field_size_limit(sys.maxsize)
 
 class KaggleParser:
-    min_content_length = 10 # Minimum amount of words in content
+    min_title_length = 1
+
+    min_content_length = 40 # Minimum amount of words in content
     max_content_length = 100 # Maximum amount of words in content
 
     tag_re = re.compile(r'<[^>]+>') # Regular expression for removing HTML tags
-
-    subword_processor = None
-
-    def __init__(self, subword_model = None):
-        if subword_model != None:
-            self.subword_processor = spm.SentencePieceProcessor()
-            self.subword_processor.Load(subword_model)
 
     def processTitle(self, title):
         title = self.tag_re.sub('', title) # Remove HTML tags
@@ -26,45 +20,37 @@ class KaggleParser:
         title = title.replace(' - The New York Times', '')
         title = title.replace(' - Breitbart', '')
 
+        # Title length needs to be bigger than specified minimum.
+        if len(title.split()) < self.min_title_length:
+            return None
+
         # Ignore Atlantic Daily articles due to noise
         if title.startswith('The Atlantic Daily:'):
             return None
 
-        title = title.lower()
-
-        tokens = ['<s>']
-        if self.subword_processor != None:
-            tokens += self.subword_processor.encode_as_pieces(title)
-        else:
-            tokens += word_tokenize(title)
-        tokens += ['</s>']
-
-        return tokens
+        return title
 
     def processContent(self, content):
         content = self.tag_re.sub('', content) # Remove HTML tags
         content = content.lower()
         sentences = sent_tokenize(content)
 
-        tokens = []
+        content_sentences = []
+        total_word_count = 0
         for s in sentences:
-            s_tokens = ['<s>']
-            if self.subword_processor != None:
-                s_tokens += self.subword_processor.encode_as_pieces(s)
-            else:
-                s_tokens += word_tokenize(s)
-            s_tokens += ['</s>']
+            s_word_count = len(s.split())
 
             # Add sentence if total amount of tokens is lower than max
-            if len(tokens) + len(s_tokens) < self.max_content_length:
-                tokens += s_tokens
+            if s_word_count + total_word_count < self.max_content_length:
+                content_sentences += [s]
+                total_word_count += s_word_count
             else:
                 break
 
-        if len(tokens) < self.min_content_length:
+        if total_word_count < self.min_content_length:
             return None
 
-        return tokens
+        return ' '.join(content_sentences)
 
     def process_source(self, source, target):
         reader = csv.reader(source)
@@ -76,8 +62,8 @@ class KaggleParser:
             title = self.processTitle(row[2])
             content = self.processContent(row[9])
 
-            if title != None and content != None and len(title) < len(content):
-                writer.writerow([' '.join(title), ' '.join(content)])
+            if title != None and content != None and len(title.split()) < len(content.split()):
+                writer.writerow([title, content])
 
     def process_sources(self, source_paths, target_path):
         target = open(target_path, 'w')
@@ -89,10 +75,7 @@ class KaggleParser:
 
 if __name__ == '__main__':
     source_paths = ['../data/kaggle/articles1.csv', '../data/kaggle/articles2.csv', '../data/kaggle/articles3.csv']
-    target_path = '../data/kaggle_parsed_subword_20000.csv'
+    target_path = './kaggle_parsed_1_40_100.csv'
 
-    parser = KaggleParser('../data/subword20000.model')
+    parser = KaggleParser()
     parser.process_sources(source_paths, target_path)
-
-
-
