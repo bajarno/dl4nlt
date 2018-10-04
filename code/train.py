@@ -220,7 +220,7 @@ def train(config):
 			optimizer.zero_grad()
 
 			# No teacher forcing
-			if np.random.random() > 0:
+			if np.random.random() > teacher_force_ratio:
 				num_teacherforce[0] += 1
 				y_c = y_c[:,0:1]
 				out_length = y_t.size(1)
@@ -257,38 +257,38 @@ def train(config):
 				print('Model has converged.')
 				return
 
+		# Decay teacherforcing
+		teacher_force_ratio *= config.teacher_force_decay
+
 		# EVAL #TODO: Seperate script or move to test.py
 		model.eval()
 
 		# Choose random sample
-		test_idx = np.random.randint(config.batch_size)
+		# test_idx = np.random.randint(config.batch_size)
 
-		# Load random sample from test batch
-		xlen = test_xl[[test_idx]].to(device)
-		Y = test_Y[[test_idx],:].to(device)
-		X = test_X[[test_idx],:xlen].to(device)
-		ylen = torch.Tensor([1]).to(device)
+		# # Load random sample from test batch
+		# xlen = test_xl[[test_idx]].to(device)
+		# Y = test_Y[[test_idx],:].to(device)
+		# X = test_X[[test_idx],:xlen].to(device)
+		# ylen = torch.Tensor([1]).to(device)
 
-		# Greedy Search
-		greedy_sequence = greedy_search(model, X, Y, xlen, ylen, test_loader)
+		# # Greedy Search
+		# greedy_sequence = greedy_search(model, X, Y, xlen, ylen, test_loader)
 
-		# Beam Search
-		all_sequences = beam_search(config.beam_search_k, model, X, Y, xlen, ylen)
+		# # Beam Search
+		# all_sequences = beam_search(config.beam_search_k, model, X, Y, xlen, ylen)
 
-		# Target sequence
-		y_t = Y[:, config.order:]
-		correct = y_t.cpu()[-1].numpy()
-		correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
+		# # Target sequence
+		# y_t = Y[:, config.order:]
+		# correct = y_t.cpu()[-1].numpy()
+		# correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
 
-		# print results
-		print("greedy:", greedy_sequence)
-		for counter, sequence in enumerate(all_sequences):
-			print("number:", counter+1, ":", [test_loader.dataset.i2w[i] for i in sequence[0].squeeze().cpu().numpy() if i > 1] )
-		print('correct', correct)
-		print()
-
-		# Decay teacherforcing
-		teacher_force_ratio *= config.teacher_force_decay
+		# # print results
+		# print("greedy :", greedy_sequence)
+		# for counter, sequence in enumerate(all_sequences):
+		# 	print("number", counter+1, ":", [test_loader.dataset.i2w[i] for i in sequence[0].squeeze().cpu().numpy() if i > 1] )
+		# print('correct :', correct)
+		# print()
 
 		
 if __name__ == "__main__":
