@@ -15,6 +15,7 @@ class KaggleParser:
 
     def processTitle(self, title):
         title = self.tag_re.sub('', title) # Remove HTML tags
+        title = title.lower()
 
         # Remove paper name from title
         title = title.replace(' - The New York Times', '')

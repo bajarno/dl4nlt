@@ -11,8 +11,9 @@ class DataPreprocessor:
     vocab = None
     subword_processor = None
 
-    def __init__(self, subword_model = None):
+    def __init__(self, max_vocab_size = None, subword_model = None):
         if subword_model == None:
+            self.max_vocab_size = max_vocab_size
             counter = self.count_words(input_file)
             self.vocab = self.build_vocab(counter)
         else:
@@ -49,7 +50,7 @@ class DataPreprocessor:
     def process_whole_word(self, content):
         sentences = sent_tokenize(content)
         sentences = [['<s>'] + self.replace_unk(s) + ['</s>'] for s in sentences]
-        sentences = ' '.join(sentences)
+        sentences = [' '.join(s) for s in sentences]
         return ' '.join(sentences)
 
     def process_sub_word(self, content):
@@ -75,9 +76,8 @@ class DataPreprocessor:
 
 if __name__ == '__main__':
     input_file = './kaggle_parsed_1_40_100.csv'
-    output_file = './preprocessed/kaggle_preprocessed_sub_16000.csv'
+    output_file = './preprocessed/kaggle_preprocessed_sub_4000.csv'
 
-    preprocessor = DataPreprocessor('./subword_model/subword16000.model')
-    # preprocessor = DataPreprocessor()
-    # preprocessor.max_vocab_size = 10000
+    preprocessor = DataPreprocessor(subword_model='./subword_model/subword4000.model')
+    # preprocessor = DataPreprocessor(max_vocab_size=20000)
     preprocessor.preprocess(input_file, output_file)
