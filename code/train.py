@@ -191,6 +191,8 @@ def train(config):
 		for batch_idx, (X, Y, xlen, ylen) in enumerate(train_loader):
 			X = X.to(device)
 			Y = Y.to(device)
+			print("X", X.size())
+			print("Y", Y.size())
 			xlen = xlen.to(device)
 			# Because we have history of size config.order, actual y_length is total y_length - order
 			ylen = (ylen-config.order).to(device)
@@ -211,7 +213,7 @@ def train(config):
 			else:
 				num_teacherforce[1] += 1
 				out = model(X, y_c, xlen, ylen, teacher_forcing=True)
-
+			print("out", out.size())
 			# Loss, optimization step
 			out = out.reshape(-1, output_size)
 			y_t = y_t.reshape(-1)
