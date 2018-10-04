@@ -1,10 +1,24 @@
 # Abstractive Headline Generation for News Articles
 
-This repository contains the code for the project done as part of the course 'Deep learning for language technology'. All code for training and evaluation is located in the `code` folder.
+This repository contains the code for the project done as part of the course 'Deep learning for language technology'. All code for training and evaluation is located in the `code` folder. All code related to pre-processing is located in the `data` folder.
 
 ## Pre-processing
 
-TODO
+First the dataset files need to be retrieved from [Kaggle](https://www.kaggle.com/snapcrack/all-the-news) and placed in `data/kaggle`. To parse the dataset files:
+```
+python kaggleparser.py
+```
+
+To generate a subword dataset, a subword model needs to be generated before the data can be tokenized:
+```
+python subword_model_trainer.py
+```
+
+To preprocess the parsed file:
+```
+python datapreprocessory.py
+```
+
 
 ## Training
 
