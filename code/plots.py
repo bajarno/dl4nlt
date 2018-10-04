@@ -3,6 +3,7 @@
 from collections import Counter
 import argparse
 import matplotlib.pyplot as plt
+plt.style.use('seaborn')
 import csv
 
 def parse_file_line_by_line(filename):
@@ -43,6 +44,7 @@ def collect_count(file, fn):
             count_per_word[word] += 1
 
 
+    count_per_word['fdsafasdfsa'] = 1
     vocab = set([word for word, _ in count_per_word.items()])
     words, counts = zip(*count_per_word.most_common())
     sen_length, sen_counts = zip(*word_per_sentence.most_common())
