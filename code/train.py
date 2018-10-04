@@ -195,7 +195,6 @@ def train(config):
 		# EXPERIMENTAL: set UNK weight lower (maybe not needed with better vocab)
 		loss_weights = torch.ones(vocab_size).to(device)
 		if 'UNK' in train_loader.dataset.w2i:
-			print("bestaat dit?:", train_loader.dataset.w2i['UNK'])
 			loss_weights[train_loader.dataset.w2i['UNK']] = 0.3
 		criterion = nn.CrossEntropyLoss(weight=loss_weights, ignore_index=0)
 	
