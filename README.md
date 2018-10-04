@@ -30,3 +30,4 @@ Or for the sequence-to-sequence model:
 ``` 
 python test_s2s.py --model_file <checkpoint_name>
 ```
+Be sure to use the same hyperparameter options the model was trained with.
