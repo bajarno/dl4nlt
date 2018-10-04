@@ -107,16 +107,19 @@ def beam_search(config, model, X, Y, xlen, ylen):
 			eos_idx = (top_idx[:,:,:k] == 3).squeeze().nonzero()
 			num_candidates = k if eos_idx.shape[0] == 0 else k+1
 			for j in range(num_candidates):
-				candidate = [torch.cat((seq,top_idx[:,:,[j]]), dim=-1), score - top_probs[:,:,[j]]] # log probs!
+				candidate = [torch.cat((seq,top_idx[:,:,[j]]), dim=-1), score + top_probs[:,:,[j]]] # log probs!
 				if (eos_idx.shape[0] == 0 or eos_idx != j):
 					all_candidates.append(candidate)
 				else:
 					all_sequences.append(candidate)
-		ordered = sorted(all_candidates, key=lambda tup:tup[1])
+		ordered = sorted(all_candidates, key=lambda tup:tup[1], reverse=True)
 		active_sequences = ordered[:k]
-	if len(all_sequences) == 0:
-		all_sequences = active_sequences
-	all_sequences = sorted(all_sequences, key=lambda tup:tup[1])
+
+	all_sequences = all_sequences + active_sequences
+	for i in range(len(all_sequences)):
+		all_sequences[i][1] = all_sequences[i][1]/(all_sequences[i][0].shape[2]**config.length_bonus)
+
+	all_sequences = sorted(all_sequences, key=lambda tup:tup[1], reverse=True)
 	return all_sequences[:k]
 
 def greedy_search(model, X, Y, xlen, ylen, test_loader):
@@ -257,7 +260,7 @@ def train(config):
 			if has_converged(losses):
 				print('Model has converged.')
 				return
-
+			break
 		# Decay teacherforcing
 		teacher_force_ratio *= config.teacher_force_decay
 
@@ -320,8 +323,9 @@ if __name__ == "__main__":
 	parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
 	parser.add_argument('--output_dir', type=str, default='./', help='The directory used for saving the model')
 
-	parser.add_argument('--beam_search_k', type=int, default=2, help='The number of sequences to store in the beam search algorithm')
-	
+	parser.add_argument('--beam_search_k', type=int, default=5, help='The number of sequences to store in the beam search algorithm')
+	parser.add_argument('--length_bonus', type=float, default=1.4, help='Giving preference to longer sequences (if > 1) or shorter (if < 1)')
+
 	# Misc params
 	#parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')
 	#parser.add_argument('--device', type=str, default="cuda:0", help="Training device 'cpu' or 'cuda:0'")
