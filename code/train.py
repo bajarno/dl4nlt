@@ -92,7 +92,8 @@ def has_converged(losses):
 
     return True
 
-def beam_search(k, model, X, Y, xlen, ylen, sequence_len):
+def beam_search(k, model, X, Y, xlen, ylen):
+	sequence_len = len(np.trim_zeros(Y[:, config.order:].squeeze().cpu().numpy()))
 	all_sequences = list()
 	active_sequences = [[torch.stack([Y[:, :config.order]], 1), 0]]
 	for beam_depth in range(sequence_len):
@@ -117,7 +118,10 @@ def beam_search(k, model, X, Y, xlen, ylen, sequence_len):
 	all_sequences = sorted(all_sequences, key=lambda tup:tup[1])
 	return all_sequences[:k]
 
-def greedy_search(model, X, y_c, xlen, ylen, sequence_len, test_loader):
+def greedy_search(model, X, Y, xlen, ylen, test_loader):
+	sequence_len = len(np.trim_zeros(Y[:, config.order:].squeeze().cpu().numpy()))
+	y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
+	y_c = y_c[:,0:1]
 	out = model(X, y_c, xlen, ylen, output_length=sequence_len, teacher_forcing=False)
 	greedy_sentence = torch.argmax(out[-1], -1).cpu().numpy()
 	greedy_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in greedy_sentence]
@@ -252,33 +256,27 @@ def train(config):
 			if has_converged(losses):
 				print('Model has converged.')
 				return
-			break
-
-		# Decay teacherforcing
-		teacher_force_ratio *= config.teacher_force_decay
 
 		# EVAL #TODO: Seperate script or move to test.py
 		model.eval()
 
-		# Load test batch and choose random sample
+		# Choose random sample
 		test_idx = np.random.randint(config.batch_size)
+
+		# Load random sample from test batch
 		xlen = test_xl[[test_idx]].to(device)
 		Y = test_Y[[test_idx],:].to(device)
 		X = test_X[[test_idx],:xlen].to(device)
 		ylen = torch.Tensor([1]).to(device)
-		
-		y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
-		y_c = y_c[:,0:1]
-		y_t = Y[:, config.order:]
-		sequence_len = len(np.trim_zeros(y_t.squeeze().cpu().numpy()))
 
 		# Greedy Search
-		greedy_sequence = greedy_search(model, X, y_c, xlen, ylen, sequence_len, test_loader)
+		greedy_sequence = greedy_search(model, X, Y, xlen, ylen, test_loader)
 
 		# Beam Search
-		all_sequences = beam_search(config.beam_search_k, model, X, Y, xlen, ylen, sequence_len)
+		all_sequences = beam_search(config.beam_search_k, model, X, Y, xlen, ylen)
 
 		# Target sequence
+		y_t = Y[:, config.order:]
 		correct = y_t.cpu()[-1].numpy()
 		correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
 
@@ -288,6 +286,9 @@ def train(config):
 			print("number:", counter+1, ":", [test_loader.dataset.i2w[i] for i in sequence[0].squeeze().cpu().numpy() if i > 1] )
 		print('correct', correct)
 		print()
+
+		# Decay teacherforcing
+		teacher_force_ratio *= config.teacher_force_decay
 
 		
 if __name__ == "__main__":
