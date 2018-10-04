@@ -92,31 +92,44 @@ def has_converged(losses):
 
     return True
 
-def beam_search_decoder(data, k):
-	data = torch.softmax(data, dim = 1)
-	sequences = [[list(), 0]]
-	# walk over each step in sequence
-	for row in data:
+def beam_search(k, model, X, Y, xlen, ylen, sequence_len):
+	all_sequences = list()
+	active_sequences = [[torch.stack([Y[:, :config.order]], 1), 0]]
+	for beam_depth in range(sequence_len):
 		all_candidates = list()
-		# expand each current candidate
-		for i in range(len(sequences)):
-			seq, score = sequences[i]
-			for j in range(len(row)):
-				candidate = [seq + [j], score + -np.log(row[j])]
-				all_candidates.append(candidate)
-		# order all candidates by score
+		for i in range(len(active_sequences)):
+			seq, score = active_sequences[i]
+			out = model(X, seq[:,:,-config.order:], xlen, ylen)
+			out = torch.log_softmax(out, dim=-1)
+			top_probs, top_idx = torch.topk(out, k+1, dim=-1, sorted = True)
+			eos_idx = (top_idx[:,:,:k] == 3).squeeze().nonzero()
+			num_candidates = k if eos_idx.shape[0] == 0 else k+1
+			for j in range(num_candidates):
+				candidate = [torch.cat((seq,top_idx[:,:,[j]]), dim=-1), score - top_probs[:,:,[j]]] # log probs!
+				if (eos_idx.shape[0] == 0 or eos_idx != j):
+					all_candidates.append(candidate)
+				else:
+					all_sequences.append(candidate)
 		ordered = sorted(all_candidates, key=lambda tup:tup[1])
-		# select k best
-		sequences = ordered[:k]
-	return sequences
-	
+		active_sequences = ordered[:k]
+	if len(all_sequences) == 0:
+		all_sequences = active_sequences
+	all_sequences = sorted(all_sequences, key=lambda tup:tup[1])
+	return all_sequences[:k]
+
+def greedy_search(model, X, y_c, xlen, ylen, sequence_len, test_loader):
+	out = model(X, y_c, xlen, ylen, output_length=sequence_len, teacher_forcing=False)
+	greedy_sentence = torch.argmax(out[-1], -1).cpu().numpy()
+	greedy_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in greedy_sentence]
+	return greedy_sentence
+
 def train(config):
 	# Initialize the device which to run the model on
 	device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 	print("device:", device)
 	# Get torch loaders for training and test data
 	train_loader, test_loader = get_dataloaders(config.dataset, 
-												markov_order=config.order, batch_size=config.batch_size)
+												markov_order=config.order+1, batch_size=config.batch_size)
 	vocab_size = train_loader.dataset.vocab_size
 	
 	# Load single test batch for evaluation
@@ -191,8 +204,6 @@ def train(config):
 		for batch_idx, (X, Y, xlen, ylen) in enumerate(train_loader):
 			X = X.to(device)
 			Y = Y.to(device)
-			print("X", X.size())
-			print("Y", Y.size())
 			xlen = xlen.to(device)
 			# Because we have history of size config.order, actual y_length is total y_length - order
 			ylen = (ylen-config.order).to(device)
@@ -205,7 +216,7 @@ def train(config):
 			optimizer.zero_grad()
 
 			# No teacher forcing
-			if np.random.random() > teacher_force_ratio:
+			if np.random.random() > 0:
 				num_teacherforce[0] += 1
 				y_c = y_c[:,0:1]
 				out_length = y_t.size(1)
@@ -213,7 +224,6 @@ def train(config):
 			else:
 				num_teacherforce[1] += 1
 				out = model(X, y_c, xlen, ylen, teacher_forcing=True)
-			print("out", out.size())
 			# Loss, optimization step
 			out = out.reshape(-1, output_size)
 			y_t = y_t.reshape(-1)
@@ -242,47 +252,42 @@ def train(config):
 			if has_converged(losses):
 				print('Model has converged.')
 				return
-				
-		
-		# EVAL #TODO: Seperate script or move to test.py
-		model.eval()
-		
-		# Load test batch
-		Y = test_Y.to(device)
-		X = test_X.to(device)
-		xlen = test_xl.to(device)
-		ylen = (test_yl-config.order).to(device)
-		
-		# Make ngrams and targets
-		y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
-		y_t = Y[:, config.order:]
-
-		out = model(X, y_c, xlen, ylen)
-		if config.adasoft:
-			test_sentences = criterion.predict(out.reshape(-1, output_size)).reshape(out.size(0), out.size(1))
-			test_sentences = test_sentences.cpu().numpy()
-		else:
-			test_sentences = beam_search_decoder(out[-1].detach().cpu(), config.beam_search_k)
-			#test_sentence = torch.argmax(out[-1], -1).cpu().numpy()
-		print("top", config.beam_search_k, "predictions:")
-		for counter, sentence in enumerate(test_sentences):
-			prediction = []
-			for i in sentence[0]:
-				prediction.append(test_loader.dataset.i2w[i])
-				if prediction[-1] == '</s>':
-					break
-			print('{}: {}'.format(counter + 1, prediction))
-
-		#test_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in test_sentence]
-		#print('test_sentence', test_sentence)
-		
-		correct = y_t.cpu()[-1].numpy()
-		correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
-		print('correct', correct)
-		print()
+			break
 
 		# Decay teacherforcing
 		teacher_force_ratio *= config.teacher_force_decay
+
+		# EVAL #TODO: Seperate script or move to test.py
+		model.eval()
+
+		# Load test batch and choose random sample
+		test_idx = np.random.randint(config.batch_size)
+		xlen = test_xl[[test_idx]].to(device)
+		Y = test_Y[[test_idx],:].to(device)
+		X = test_X[[test_idx],:xlen].to(device)
+		ylen = torch.Tensor([1]).to(device)
+		
+		y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
+		y_c = y_c[:,0:1]
+		y_t = Y[:, config.order:]
+		sequence_len = len(np.trim_zeros(y_t.squeeze().cpu().numpy()))
+
+		# Greedy Search
+		greedy_sequence = greedy_search(model, X, y_c, xlen, ylen, sequence_len, test_loader)
+
+		# Beam Search
+		all_sequences = beam_search(config.beam_search_k, model, X, Y, xlen, ylen, sequence_len)
+
+		# Target sequence
+		correct = y_t.cpu()[-1].numpy()
+		correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
+
+		# print results
+		print("greedy:", greedy_sequence)
+		for counter, sequence in enumerate(all_sequences):
+			print("number:", counter+1, ":", [test_loader.dataset.i2w[i] for i in sequence[0].squeeze().cpu().numpy() if i > 1] )
+		print('correct', correct)
+		print()
 
 		
 if __name__ == "__main__":
@@ -313,7 +318,7 @@ if __name__ == "__main__":
 	parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
 	parser.add_argument('--output_dir', type=str, default='./', help='The directory used for saving the model')
 
-	parser.add_argument('--beam_search_k', type=int, default=3, help='The number of sequences to store in the beam search algorithm')
+	parser.add_argument('--beam_search_k', type=int, default=2, help='The number of sequences to store in the beam search algorithm')
 	
 	# Misc params
 	#parser.add_argument('--print_every', type=int, default=5, help='How often to print training progress')

@@ -70,14 +70,11 @@ class FBModel(nn.Module):
 
             x_emb = self.embedding(x)
             y_c_emb = self.embedding(y_c)
-
             # Generate context vectors from y_c
             nnlm_out = self.nnlm(y_c_emb)
-
             # Generate document vectors from x
             enc_out = self.encoder(x_emb, y_c_emb, xlen, ylen)
             out = enc_out + nnlm_out
-
             return out
 
         else:
@@ -95,7 +92,6 @@ class FBModel(nn.Module):
                 enc_out = self.encoder(x_emb, y_c_emb, xlen, ylen)
                 out = nnlm_out + enc_out
                 outputs.append(out)
-
                 # Make new ngram y_c with previous prediction
                 pred = out.detach().argmax(-1)
                 y_c = torch.cat([y_c[:, :, 1:], pred.unsqueeze(1)], dim=-1)
