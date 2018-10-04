@@ -92,7 +92,8 @@ def has_converged(losses):
 
     return True
 
-def beam_search(k, model, X, Y, xlen, ylen):
+def beam_search(config, model, X, Y, xlen, ylen):
+	k = config.beam_search_k
 	sequence_len = len(np.trim_zeros(Y[:, config.order:].squeeze().cpu().numpy()))
 	all_sequences = list()
 	active_sequences = [[torch.stack([Y[:, :config.order]], 1), 0]]
@@ -276,7 +277,7 @@ def train(config):
 		# greedy_sequence = greedy_search(model, X, Y, xlen, ylen, test_loader)
 
 		# # Beam Search
-		# all_sequences = beam_search(config.beam_search_k, model, X, Y, xlen, ylen)
+		# all_sequences = beam_search(config, model, X, Y, xlen, ylen)
 
 		# # Target sequence
 		# y_t = Y[:, config.order:]

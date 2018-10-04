@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from encoders import BOWEncoder, ConvEncoder, AttnEncoder
 from dataloader import get_dataloaders
 from nnlm import NNLM, FBModel
-from train import accuracy
+from train import accuracy, beam_search, greedy_search
 
 from collections import Counter
 from collections import defaultdict
@@ -98,35 +98,106 @@ def test(config):
 		xlen = xlen.to(device)
 		ylen = (ylen-config.order).to(device)
 		
-		y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
 		y_t = Y[:, config.order:]
+		# Only for greedy search:
+		if not config_old.beam_search_strategy:
+			y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
+			y_c = y_c[:,0:1]
+			out_length = y_t.size(1)
+			out = model(X, y_c, xlen, ylen, output_length=out_length, teacher_forcing=False)
 		
-		# No teacher forcing
-		y_c = y_c[:,0:1]
-		out_length = y_t.size(1)
-		out = model(X, y_c, xlen, ylen, output_length=out_length, teacher_forcing=False)
-				
-		# Calculate avg rouge scores over batch
 		batch_correct = []
-		batch_test_sentence = []
-		for i in range(len(out)):
-			test_sentence = torch.argmax(out[i], -1).cpu().numpy()
-			test_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in test_sentence]
+		batch_predicted = []
+		for i in range(config.batch_size):
+			if config_old.beam_search_strategy: # BEAM SEARCH PREDICTION
+				beam_xlen = xlen[[i]].to(device)
+				beam_Y = Y[[i],:].to(device)
+				beam_X = X[[i],:beam_xlen].to(device)
+				beam_ylen = torch.Tensor([1]).to(device)
+			
+				all_sequences = beam_search(config, model, beam_X, beam_Y, beam_xlen, beam_ylen)
+				best_sequence = all_sequences[0][0]
+				predicted = [test_loader.dataset.i2w[i] for i in best_sequence.squeeze().cpu().numpy() if i > 1]
+			
+			else: # GREEDY PREDICTION
+ 				predicted = torch.argmax(out[i], -1).cpu().numpy()
+ 				predicted = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in predicted]
+			
+			# CORRECT PREDICTION
 			correct = y_t.cpu()[i].numpy()
-			correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
-
+			correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]	
+			
+			# Transform to rouge subwords or normal words
 			if config_old.rouge_subwords:
 				correct = ''.join(word for word in correct).replace('▁', ' ')
-				test_sentence = ''.join(word for word in test_sentence).replace('▁', ' ')
+				predicted = ''.join(word for word in predicted).replace('▁', ' ')
 			else:
-				test_sentence = ' '.join(word for word in test_sentence)
+				predicted = ' '.join(word for word in predicted)
 				correct = ' '.join(word for word in correct)
-
-			batch_test_sentence.append(test_sentence)
-			batch_correct.append(correct)			
 			
+			print("PREDICTED:", predicted[0])
+			print("CORRECT:", correct[0])
+			batch_predicted.append(predicted)
+			batch_correct.append(correct)
+		
+		'''
+		if config_old.beam_search_strategy: # BEAM SEARCH	
+			# Calculate avg rouge scores over batch
+			batch_correct = []
+			batch_test_sentence = []
+			y_t = Y[:, config.order:]
+			for i in range(config.batch_size):						
+				beam_xlen = xlen[[i]].to(device)
+				beam_Y = Y[[i],:].to(device)
+				beam_X = X[[i],:beam_xlen].to(device)
+				beam_ylen = torch.Tensor([1]).to(device)
+				
+				all_sequences = beam_search(config, model, beam_X, beam_Y, beam_xlen, beam_ylen)
+				best_sequence = all_sequences[0][0]
+				test_sentence = [test_loader.dataset.i2w[i] for i in best_sequence.squeeze().cpu().numpy() if i > 1]
+				
+				correct = y_t.cpu()[i].numpy()
+				correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
+				
+				if config_old.rouge_subwords:
+					correct = ''.join(word for word in correct).replace('▁', ' ')
+					test_sentence = ''.join(word for word in test_sentence).replace('▁', ' ')
+				else:
+					test_sentence = ' '.join(word for word in test_sentence)
+					correct = ' '.join(word for word in correct)
+					
+				batch_test_sentence.append(test_sentence)
+				batch_correct.append(correct)
+						
+		else: # GREEDY SEARCH
+			y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
+			y_t = Y[:, config.order:]
+		
+			# No teacher forcing
+			y_c = y_c[:,0:1]
+			out_length = y_t.size(1)
+			out = model(X, y_c, xlen, ylen, output_length=out_length, teacher_forcing=False)
+		
+			# Calculate avg rouge scores over batch
+			batch_correct = []
+			batch_test_sentence = []
+			for i in range(len(out)):
+				test_sentence = torch.argmax(out[i], -1).cpu().numpy()
+				test_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in test_sentence]
+				correct = y_t.cpu()[i].numpy()
+				correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
 
-		rouge = rouge_eval.get_scores(batch_test_sentence, batch_correct, True) # output format is dict	
+				if config_old.rouge_subwords:
+					correct = ''.join(word for word in correct).replace('▁', ' ')
+					test_sentence = ''.join(word for word in test_sentence).replace('▁', ' ')
+				else:
+					test_sentence = ' '.join(word for word in test_sentence)
+					correct = ' '.join(word for word in correct)
+
+				batch_test_sentence.append(test_sentence)
+				batch_correct.append(correct)			
+			'''
+		rouge = rouge_eval.get_scores(batch_predicted, batch_correct, True) # output format is dict	
 		
 		# Turn dict into lists and sum all corresponding elements with total
 		rouge_scores[0][0] += rouge['rouge-1']['f']
@@ -167,9 +238,12 @@ if __name__ == "__main__":
 		
 	# Testing params
 	parser.add_argument('--batch_size', type=int, default=64, help='Number of examples to process in a batch.')
+	
+	# Beam search
+	parser.add_argument('--beam_search_strategy', type=bool, required=True)
+	parser.add_argument('--beam_search_k', type=int, default=2, help='')
 
 	config = parser.parse_args()
 
 	# Test the model
 	test(config)
-
