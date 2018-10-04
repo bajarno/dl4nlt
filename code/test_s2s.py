@@ -96,13 +96,28 @@ def test(config):
 			test_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in test_sentence]
 			correct = Y_t.cpu()[i].numpy()
 			correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
-			batch_test_sentence.append(' '.join(word for word in test_sentence))
-			batch_correct.append(' '.join(word for word in correct))			
+
+			if config_old.rouge_subwords:
+				correct = ''.join(word for word in correct).replace('▁', ' ')
+				test_sentence = ''.join(word for word in test_sentence).replace('▁', ' ')
+			else:
+				test_sentence = ' '.join(word for word in test_sentence)
+				correct = ' '.join(word for word in correct)
+
+			batch_test_sentence.append(test_sentence)
+			batch_correct.append(correct)			
 		rouge = rouge_eval.get_scores(batch_test_sentence, batch_correct, True) # output format is dict	
-		print(rouge)
+
 		# Turn dict into lists and sum all corresponding elements with total
-		for i in range(len(rouge_scores)):
-			rouge_scores[i] = [round(sum(x), 2) for x in zip(rouge_scores[i], list(list(rouge.values())[i].values()))]
+		rouge_scores[0][0] += rouge['rouge-1']['f']
+		rouge_scores[0][1] += rouge['rouge-1']['p']
+		rouge_scores[0][2] += rouge['rouge-1']['r']
+		rouge_scores[1][0] += rouge['rouge-2']['f']
+		rouge_scores[1][1] += rouge['rouge-2']['p']
+		rouge_scores[1][2] += rouge['rouge-2']['r']
+		rouge_scores[2][0] += rouge['rouge-l']['f']
+		rouge_scores[2][1] += rouge['rouge-l']['p']
+		rouge_scores[2][2] += rouge['rouge-l']['r']
 		
 		num_examples += 1
 		
@@ -135,6 +150,7 @@ if __name__ == "__main__":
 		
 	# Testing params
 	parser.add_argument('--batch_size', type=int, default=64, help='Number of examples to process in a batch.')
+	parser.add_argument('--rouge_subwords', action="store_false", default=True)
 
 	config = parser.parse_args()
 

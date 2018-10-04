@@ -1,8 +1,7 @@
 
 import numpy as np
 import argparse
-import os.path # or os
-import sys
+import os.path # or os import sys
 import glob
 import shutil
 import time
@@ -37,6 +36,7 @@ def test(config):
 	
 	# Initialize the device which to run the model on
 	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+	config_old = config
 	
 	# Load pre-trained model
 	file_path = config.model_dir+config.model_file
@@ -51,7 +51,7 @@ def test(config):
 	
 	# Get torch loaders for training and test data
 	train_loader, test_loader = get_dataloaders(config.dataset, 
-		markov_order=config.order, batch_size=config.batch_size)
+		markov_order=config.order + 1, batch_size=config.batch_size)
 	vocab_size = train_loader.dataset.vocab_size
 			
 	# The following steps are to initialize the model, which will be overloaded with the trained model
@@ -114,14 +114,31 @@ def test(config):
 			test_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in test_sentence]
 			correct = y_t.cpu()[i].numpy()
 			correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
-			batch_test_sentence.append(' '.join(word for word in test_sentence))
-			batch_correct.append(' '.join(word for word in correct))			
-		rouge = rouge_eval.get_scores(batch_correct, batch_test_sentence, True) # output format is dict	
+
+			if config_old.rouge_subwords:
+				correct = ''.join(word for word in correct).replace('▁', ' ')
+				test_sentence = ''.join(word for word in test_sentence).replace('▁', ' ')
+			else:
+				test_sentence = ' '.join(word for word in test_sentence)
+				correct = ' '.join(word for word in correct)
+
+			batch_test_sentence.append(test_sentence)
+			batch_correct.append(correct)			
+			
+
+		rouge = rouge_eval.get_scores(batch_test_sentence, batch_correct, True) # output format is dict	
 		
 		# Turn dict into lists and sum all corresponding elements with total
-		for i in range(len(rouge_scores)):
-			rouge_scores[i] = [round(sum(x), 2) for x in zip(rouge_scores[i], list(list(rouge.values())[i].values()))]
-		
+		rouge_scores[0][0] += rouge['rouge-1']['f']
+		rouge_scores[0][1] += rouge['rouge-1']['p']
+		rouge_scores[0][2] += rouge['rouge-1']['r']
+		rouge_scores[1][0] += rouge['rouge-2']['f']
+		rouge_scores[1][1] += rouge['rouge-2']['p']
+		rouge_scores[1][2] += rouge['rouge-2']['r']
+		rouge_scores[2][0] += rouge['rouge-l']['f']
+		rouge_scores[2][1] += rouge['rouge-l']['p']
+		rouge_scores[2][2] += rouge['rouge-l']['r']
+
 		num_examples += 1
 		
 		# Show every 10 batches
@@ -132,8 +149,8 @@ def test(config):
 	
 	# Final average rouge scores
 	final_rouge_scores = current_rouge_scores(rouge_scores, num_examples)
-		
-		
+
+
 if __name__ == "__main__":
 	
 	# Parse training configuration
@@ -143,14 +160,10 @@ if __name__ == "__main__":
 	parser.add_argument('--model_dir', type=str, default='../model_checkpoints/', help='Path to saved model that needs to be tested.')
 	parser.add_argument('--model_file', type=str, required=True, help='Filename of saved model.')
 	parser.add_argument('--dataset', type=str, default='../data/kaggle_preprocessed_subword_5000.csv', help='The datafile used for training')
-	
-	parser.add_argument('--pad_token', type=int, default=0, help='Token (int) used for padding.')
 	parser.add_argument('--order', type=int, default=5, help='TODO: add description.')
 	
 	# Model params
-	parser.add_argument('--embedding_dim', type=int, default=128, help='Size of embedding.')
-	parser.add_argument('--hidden_size', type=int, default=128, help='Amount of hidden units.')
-	parser.add_argument('--encoder_type', type=str, default='Conv', help='Type of Encoder: BOW, Conv, or Attn.')
+	parser.add_argument('--rouge_subwords', action="store_false", default=True)
 		
 	# Testing params
 	parser.add_argument('--batch_size', type=int, default=64, help='Number of examples to process in a batch.')
@@ -160,7 +173,3 @@ if __name__ == "__main__":
 	# Test the model
 	test(config)
 
-		
-		
-		
-		
