@@ -98,7 +98,7 @@ def test(config):
 			correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
 			batch_test_sentence.append(' '.join(word for word in test_sentence))
 			batch_correct.append(' '.join(word for word in correct))			
-		rouge = rouge_eval.get_scores(batch_correct, batch_test_sentence, True) # output format is dict	
+		rouge = rouge_eval.get_scores(batch_test_sentence, batch_correct, True) # output format is dict	
 		print(rouge)
 		# Turn dict into lists and sum all corresponding elements with total
 		for i in range(len(rouge_scores)):
