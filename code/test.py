@@ -81,6 +81,8 @@ def test(config):
 	model.load_state_dict(checkpoint['model'])
 	model.eval()
 	print('Model loaded from checkpoint, start evaluation.')
+	print('Generation method: {}'.format(config_old.search_strategy))
+	print('Using subwords: {}'.format(config_old.rouge_subwords))
 	
 						# f, p, r = (f1-score, precision, recall)
 	rouge_scores = [[0, 0, 0], # rouge-1
@@ -100,7 +102,7 @@ def test(config):
 		
 		y_t = Y[:, config.order:]
 		# Only for greedy search:
-		if not config_old.beam_search_strategy:
+		if config_old.search_strategy != 'BEAM':
 			y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
 			y_c = y_c[:,0:1]
 			out_length = y_t.size(1)
@@ -108,8 +110,9 @@ def test(config):
 		
 		batch_correct = []
 		batch_predicted = []
+		
 		for i in range(config.batch_size):
-			if config_old.beam_search_strategy: # BEAM SEARCH PREDICTION
+			if config_old.search_strategy == 'BEAM': # BEAM SEARCH PREDICTION
 				beam_xlen = xlen[[i]].to(device)
 				beam_Y = Y[[i],:].to(device)
 				beam_X = X[[i],:beam_xlen].to(device)
@@ -128,75 +131,16 @@ def test(config):
 			correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]	
 			
 			# Transform to rouge subwords or normal words
-			if config_old.rouge_subwords:
+			if not config_old.rouge_subwords:
 				correct = ''.join(word for word in correct).replace('▁', ' ')
 				predicted = ''.join(word for word in predicted).replace('▁', ' ')
 			else:
 				predicted = ' '.join(word for word in predicted)
 				correct = ' '.join(word for word in correct)
 			
-			print("PREDICTED:", predicted[0])
-			print("CORRECT:", correct[0])
 			batch_predicted.append(predicted)
 			batch_correct.append(correct)
 		
-		'''
-		if config_old.beam_search_strategy: # BEAM SEARCH	
-			# Calculate avg rouge scores over batch
-			batch_correct = []
-			batch_test_sentence = []
-			y_t = Y[:, config.order:]
-			for i in range(config.batch_size):						
-				beam_xlen = xlen[[i]].to(device)
-				beam_Y = Y[[i],:].to(device)
-				beam_X = X[[i],:beam_xlen].to(device)
-				beam_ylen = torch.Tensor([1]).to(device)
-				
-				all_sequences = beam_search(config, model, beam_X, beam_Y, beam_xlen, beam_ylen)
-				best_sequence = all_sequences[0][0]
-				test_sentence = [test_loader.dataset.i2w[i] for i in best_sequence.squeeze().cpu().numpy() if i > 1]
-				
-				correct = y_t.cpu()[i].numpy()
-				correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
-				
-				if config_old.rouge_subwords:
-					correct = ''.join(word for word in correct).replace('▁', ' ')
-					test_sentence = ''.join(word for word in test_sentence).replace('▁', ' ')
-				else:
-					test_sentence = ' '.join(word for word in test_sentence)
-					correct = ' '.join(word for word in correct)
-					
-				batch_test_sentence.append(test_sentence)
-				batch_correct.append(correct)
-						
-		else: # GREEDY SEARCH
-			y_c = torch.stack([Y[:, i:i+config.order] for i in range(0, Y.size(1)-config.order)], 1)
-			y_t = Y[:, config.order:]
-		
-			# No teacher forcing
-			y_c = y_c[:,0:1]
-			out_length = y_t.size(1)
-			out = model(X, y_c, xlen, ylen, output_length=out_length, teacher_forcing=False)
-		
-			# Calculate avg rouge scores over batch
-			batch_correct = []
-			batch_test_sentence = []
-			for i in range(len(out)):
-				test_sentence = torch.argmax(out[i], -1).cpu().numpy()
-				test_sentence = [test_loader.dataset.i2w[i] if i > 0 else 'PAD' for i in test_sentence]
-				correct = y_t.cpu()[i].numpy()
-				correct = [test_loader.dataset.i2w[i] for i in correct if i > 0]
-
-				if config_old.rouge_subwords:
-					correct = ''.join(word for word in correct).replace('▁', ' ')
-					test_sentence = ''.join(word for word in test_sentence).replace('▁', ' ')
-				else:
-					test_sentence = ' '.join(word for word in test_sentence)
-					correct = ' '.join(word for word in correct)
-
-				batch_test_sentence.append(test_sentence)
-				batch_correct.append(correct)			
-			'''
 		rouge = rouge_eval.get_scores(batch_predicted, batch_correct, True) # output format is dict	
 		
 		# Turn dict into lists and sum all corresponding elements with total
@@ -221,7 +165,6 @@ def test(config):
 	# Final average rouge scores
 	final_rouge_scores = current_rouge_scores(rouge_scores, num_examples)
 
-
 if __name__ == "__main__":
 	
 	# Parse training configuration
@@ -239,8 +182,8 @@ if __name__ == "__main__":
 	# Testing params
 	parser.add_argument('--batch_size', type=int, default=64, help='Number of examples to process in a batch.')
 	
-	# Beam search
-	parser.add_argument('--beam_search_strategy', type=bool, required=True)
+	# Search strategy
+	parser.add_argument('--search_strategy', type=str, default='BEAM', help='BEAM or GREEDY')
 	parser.add_argument('--beam_search_k', type=int, default=2, help='')
 
 	config = parser.parse_args()
