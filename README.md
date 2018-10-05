@@ -16,7 +16,7 @@ python subword_model_trainer.py
 
 To preprocess the parsed file:
 ```
-python datapreprocessory.py
+python datapreprocessor.py
 ```
 
 
